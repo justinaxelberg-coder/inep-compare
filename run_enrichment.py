@@ -9,6 +9,9 @@ from pathlib import Path
 import pandas as pd
 import yaml
 
+from config.secrets_loader import load_secrets
+load_secrets()
+
 from enrichment.coauthorship import compute_coauth_metrics
 from enrichment.diamond_oa import enrich_oa_file
 from enrichment.geographic import load_and_compute as geo_compute
@@ -49,6 +52,9 @@ def _fetch_papers_for_enrichment(source: str, e_mec_codes: list[str],
     spotlight = config.get("spotlight", [])
     papers: list[dict] = []
 
+    start_year = config.get("temporal_window", {}).get("start_year", 2023)
+    end_year   = config.get("temporal_window", {}).get("end_year",   2023)
+
     if source == "openalex":
         from connectors.api.openalex import OpenAlexConnector
         conn = OpenAlexConnector(email=os.getenv("OPENALEX_EMAIL"), max_records=None)
@@ -59,25 +65,47 @@ def _fetch_papers_for_enrichment(source: str, e_mec_codes: list[str],
             if not ror:
                 continue
             try:
-                records = conn.fetch(ror_id=ror)
+                records = conn.query_institution(
+                    e_mec_code=str(inst["e_mec_code"]),
+                    ror_id=ror,
+                    name=inst.get("name", ""),
+                    start_year=start_year,
+                    end_year=end_year,
+                )
                 papers.extend(conn.normalize(r) for r in records)
             except Exception as exc:
                 logger.warning("OpenAlex fetch failed for %s: %s", ror, exc)
 
     elif source == "dimensions":
+        if not (os.getenv("DIMENSIONS_API_KEY") or
+                (os.getenv("DIMENSIONS_USERNAME") and os.getenv("DIMENSIONS_PASSWORD"))):
+            logger.warning("Dimensions credentials not set — skipping Dimensions enrichment")
+            return papers
         from connectors.api.dimensions import DimensionsConnector
-        conn = DimensionsConnector(max_records=None)
+        dim_kwargs = {"max_records": None}
+        if os.getenv("DIMENSIONS_API_KEY"):
+            dim_kwargs["api_key"] = os.environ["DIMENSIONS_API_KEY"]
+        else:
+            dim_kwargs["username"] = os.environ["DIMENSIONS_USERNAME"]
+            dim_kwargs["password"] = os.environ["DIMENSIONS_PASSWORD"]
+        conn = DimensionsConnector(**dim_kwargs)
         for inst in spotlight:
             if str(inst.get("e_mec_code")) not in e_mec_codes:
                 continue
-            grid = inst.get("grid_id", "")
-            if not grid:
+            ror = inst.get("ror_id", "")
+            if not ror:
                 continue
             try:
-                records = conn.fetch(grid_id=grid)
+                records = conn.query_institution(
+                    e_mec_code=str(inst["e_mec_code"]),
+                    ror_id=ror,
+                    name=inst.get("name", ""),
+                    start_year=start_year,
+                    end_year=end_year,
+                )
                 papers.extend(conn.normalize(r) for r in records)
             except Exception as exc:
-                logger.warning("Dimensions fetch failed for %s: %s", grid, exc)
+                logger.warning("Dimensions fetch failed for %s: %s", ror, exc)
 
     return papers
 

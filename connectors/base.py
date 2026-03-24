@@ -86,7 +86,8 @@ class BaseConnector(ABC):
                 f"This is a data point — consider raising ceiling or narrowing query."
             )
 
-        normalised = [self.normalize(r) for r in raw_records[: self.max_records]]
+        cap = None if self.max_records == float("inf") else self.max_records
+        normalised = [self.normalize(r) for r in raw_records[:cap]]
         self._save_cache(cache_key, normalised)
         return normalised
 
