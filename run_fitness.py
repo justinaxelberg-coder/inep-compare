@@ -43,16 +43,37 @@ _NAME_TO_TYPE: dict[str, str] = {
     "puc": "private_university",
 }
 
-def _infer_inst_type(name: str) -> str:
+# Load authoritative sinaes_type from enriched crosswalk (if available)
+_CROSSWALK_ENRICHED = Path("registry/crosswalk_enriched.csv")
+
+
+def _load_sinaes_types() -> dict[str, str]:
+    """Return {e_mec_code: sinaes_type} from enriched crosswalk."""
+    if not _CROSSWALK_ENRICHED.exists():
+        logger.info("Enriched crosswalk not found — using name heuristics for inst type")
+        return {}
+    cw = pd.read_csv(_CROSSWALK_ENRICHED, dtype={"e_mec_code": str})
+    result = {}
+    for _, row in cw.iterrows():
+        if pd.notna(row.get("sinaes_type")):
+            result[str(row["e_mec_code"])] = str(row["sinaes_type"])
+    logger.info(f"Loaded {len(result)} authoritative institution types from enriched crosswalk")
+    return result
+
+
+def _infer_inst_type(name: str, e_mec_code: str = "",
+                     sinaes_map: dict | None = None) -> str:
+    """Return institution type — authoritative from Censo if available, else name heuristic."""
+    if sinaes_map and e_mec_code in sinaes_map:
+        return sinaes_map[e_mec_code]
     name_lower = name.lower()
-    # Check longer/more specific patterns first
     for kw, t in sorted(_NAME_TO_TYPE.items(), key=lambda x: -len(x[0])):
         if kw in name_lower:
             return t
     return "other"
 
 
-def _load_coverage(pattern: str) -> dict[str, dict[str, dict]]:
+def _load_coverage(pattern: str, sinaes_map: dict | None = None) -> dict[str, dict[str, dict]]:
     """Return {source: {inst_type: coverage_dict}} with correct mean aggregation."""
     files = sorted(PROCESSED.glob(pattern))
     if not files:
@@ -67,7 +88,8 @@ def _load_coverage(pattern: str) -> dict[str, dict[str, dict]]:
     for _, row in df.iterrows():
         src       = str(row.get("source", "unknown"))
         inst_name = str(row.get("institution_name", ""))
-        inst_type = _infer_inst_type(inst_name)
+        e_mec_code = str(row.get("e_mec_code", ""))
+        inst_type  = _infer_inst_type(inst_name, e_mec_code=e_mec_code, sinaes_map=sinaes_map)
         key = (src, inst_type)
         sums.setdefault(key, {f: 0.0 for f in numeric_fields})
         counts.setdefault(key, {f: 0 for f in numeric_fields})
@@ -90,7 +112,7 @@ def _load_coverage(pattern: str) -> dict[str, dict[str, dict]]:
     return result
 
 
-def _load_oa(pattern: str) -> dict[str, dict[str, dict]]:
+def _load_oa(pattern: str, sinaes_map: dict | None = None) -> dict[str, dict[str, dict]]:
     """Return {source: {inst_type: oa_dict}} with correct mean aggregation."""
     files = sorted(PROCESSED.glob(pattern))
     if not files:
@@ -102,7 +124,8 @@ def _load_oa(pattern: str) -> dict[str, dict[str, dict]]:
     for _, row in df.iterrows():
         src       = str(row.get("source", "unknown"))
         inst_name = str(row.get("institution_name", ""))
-        inst_type = _infer_inst_type(inst_name)
+        e_mec_code = str(row.get("e_mec_code", ""))
+        inst_type  = _infer_inst_type(inst_name, e_mec_code=e_mec_code, sinaes_map=sinaes_map)
         key = (src, inst_type)
         sums.setdefault(key, {f: 0.0 for f in oa_fields})
         counts.setdefault(key, {f: 0 for f in oa_fields})
@@ -138,14 +161,16 @@ def main() -> None:
     exporter = DatasetExporter(output_dir="data/processed")
     scorer   = FitnessScorer()
 
+    sinaes_map = _load_sinaes_types()
+
     logger.info("Loading coverage data...")
-    coverage = _load_coverage("coverage_*.csv")
+    coverage = _load_coverage("coverage_*.csv", sinaes_map=sinaes_map)
     if not coverage:
         logger.error("No coverage data — run run_sprint1.py or run_phase2.py first")
         sys.exit(1)
 
     logger.info("Loading OA data...")
-    oa = _load_oa("oa_*.csv")
+    oa = _load_oa("oa_*.csv", sinaes_map=sinaes_map)
 
     logger.info("Loading convergence data...")
     convergence = _load_convergence("overlap_phase2_*.csv")
