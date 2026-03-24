@@ -313,15 +313,20 @@ class DatasetExporter:
 
     def export_fitness_matrix(self, matrix: "FitnessMatrix", run_id: str) -> Path:
         """Export fitness matrix as CSV and SQLite."""
-        import sqlite3
         records = matrix.to_records()
         df = pd.DataFrame(records)
         path = self.output_dir / f"fitness_matrix_{run_id}.csv"
         df.to_csv(path, index=False, encoding="utf-8")
         logger.info(f"Fitness matrix: {path} ({len(df)} rows)")
         db_path = self.output_dir / f"fitness_{run_id}.db"
-        with sqlite3.connect(db_path) as conn:
-            df.to_sql("fitness_matrix", conn, if_exists="replace", index=False)
+        try:
+            import sqlite3
+            with sqlite3.connect(db_path) as conn:
+                # append so reruns with same run_id accumulate rather than silently wipe
+                df.to_sql("fitness_matrix", conn, if_exists="append", index=False)
+        except Exception as exc:
+            logger.error(f"Fitness matrix SQLite write failed: {exc}")
+            raise
         return path
 
     def export_fitness_report(self, matrix: "FitnessMatrix", run_id: str) -> Path:
