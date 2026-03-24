@@ -196,8 +196,10 @@ class DatasetExporter:
             f"**Temporal window:** {config.get('start_year')}–{config.get('end_year')}  ",
             f"**Generated:** {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M UTC')}",
             "",
-            f"> Record counts capped at {max_r:,} per institution per source. "
-            f"⚠ = ceiling hit. Actual corpus size shown where available.",
+            (f"> Record counts capped at {max_r:,} per institution per source. "
+             f"⚠ = ceiling hit. Actual corpus size shown where available."
+             if max_r is not None else
+             "> Run is **uncapped** — all available records fetched per institution per source."),
             "",
             "---",
             "",
@@ -482,10 +484,12 @@ class DatasetExporter:
             f"**Temporal window:** {config.get('start_year', '?')}–{config.get('end_year', '?')}  ",
             f"**Generated:** {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M UTC')}",
             f"",
-            f"> **Note on record counts:** Results are capped at {max_records:,} records per "
-            f"institution per source (`max_records_per_query` in `sample_config.yaml`). "
-            f"Where the ceiling was hit, the actual corpus size is shown in parentheses. "
-            f"OA rates and coverage metrics are computed on the fetched sample, not the full corpus.",
+            (f"> **Note on record counts:** Results are capped at {max_records:,} records per "
+             f"institution per source (`max_records_per_query` in `sample_config.yaml`). "
+             f"Where the ceiling was hit, the actual corpus size is shown in parentheses. "
+             f"OA rates and coverage metrics are computed on the fetched sample, not the full corpus."
+             if max_records is not None else
+             "> Run is **uncapped** — all available records fetched per institution per source."),
             f"",
             f"---",
             f"",
@@ -513,8 +517,10 @@ class DatasetExporter:
             f"",
             f"## Open Access by Institution",
             f"",
-            f"OA rates are computed on the fetched sample (N ≤ {max_records:,}). "
-            f"Where ceiling was hit, estimates apply to the fetched sample only.",
+            (f"OA rates are computed on the fetched sample (N ≤ {max_records:,}). "
+             f"Where ceiling was hit, estimates apply to the fetched sample only."
+             if max_records is not None else
+             "OA rates are computed on the full fetched corpus (uncapped run)."),
             f"",
             f"| Institution | N (fetched) | OA% | CI (95%) | Tier | Diamond% | Unpaywall agree% |",
             f"|-------------|-------------|-----|----------|------|----------|-----------------|",
