@@ -69,10 +69,11 @@ def main() -> None:
         crosswalk = pd.read_csv(CROSSWALK_IN, dtype={"e_mec_code": str})
         crosswalk["e_mec_code_padded"] = crosswalk["e_mec_code"].str.zfill(6)
 
-        denoms = registry[[
-            "e_mec_code", "sinaes_type", "phd_faculty_share",
-            "total_enrollment", "faculty_total", "region", "state", "city",
-        ]].copy()
+        # Select columns that are guaranteed to exist; optional ones may be
+        # absent depending on Censo year (column names vary across releases).
+        _want = ["e_mec_code", "sinaes_type", "faculty_with_phd",
+                 "region", "state", "city"]
+        denoms = registry[[c for c in _want if c in registry.columns]].copy()
 
         enriched = crosswalk.merge(
             denoms, left_on="e_mec_code_padded", right_on="e_mec_code",
@@ -85,7 +86,8 @@ def main() -> None:
 
         enriched.to_csv(CROSSWALK_OUT, index=False, encoding="utf-8")
         logger.info(f"Enriched crosswalk saved: {CROSSWALK_OUT}")
-        logger.info(f"\n{enriched[['e_mec_code','name','sinaes_type','phd_faculty_share']].to_string()}")
+        _show = [c for c in ['e_mec_code','name','sinaes_type','faculty_with_phd'] if c in enriched.columns]
+        logger.info(f"\n{enriched[_show].to_string()}")
     else:
         logger.warning(f"Crosswalk not found: {CROSSWALK_IN}")
 

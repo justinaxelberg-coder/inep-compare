@@ -19,31 +19,31 @@ field_scope: all
 # Spotlight sample — purposive selection for sprint 1
 # Deliberately avoids mega-universities (USP, UNICAMP, UFRJ) for tractability
 spotlight:
-  - e_mec_code: "572"         # UFABC — federal, research-active, small, well-identified in ROR
+  - e_mec_code: "4925"        # UFABC — federal, research-active, small, well-identified in ROR
     name: "Universidade Federal do ABC"
     ror_id: "https://ror.org/028kg9j04"
     openalex_id: "https://openalex.org/I71715416"
     notes: "Modern federal university, strong STEM, manageable output volume"
 
-  - e_mec_code: "97"          # UNIFESP — federal, health sciences, tractable size
+  - e_mec_code: "591"         # UNIFESP — federal, health sciences, tractable size
     name: "Universidade Federal de São Paulo"
     ror_id: "https://ror.org/02k5swt12"
     openalex_id: "https://openalex.org/I88273585"
     notes: "Health sciences focus, good international visibility, tests Ciências da Saúde"
 
-  - e_mec_code: "283"         # UFPA — regional federal, North region
+  - e_mec_code: "569"         # UFPA — regional federal, North region
     name: "Universidade Federal do Pará"
     ror_id: "https://ror.org/03q9sr818"
     openalex_id: "https://openalex.org/I59606676"
     notes: "North region, equity analysis anchor, tests regional coverage bias"
 
-  - e_mec_code: "524"         # IFSP — federal institute
+  - e_mec_code: "1810"        # IFSP — federal institute
     name: "Instituto Federal de Educação, Ciência e Tecnologia de São Paulo"
     ror_id: "https://ror.org/005pn5z34"
     openalex_id: "https://openalex.org/I107371206"
     notes: "IF category, tests IF visibility in international sources"
 
-  - e_mec_code: "1982"        # PUC-Campinas — mid-sized private
+  - e_mec_code: "19"          # PUC-Campinas — mid-sized private
     name: "Pontifícia Universidade Católica de Campinas"
     ror_id: "https://ror.org/01wjxn842"
     openalex_id: "https://openalex.org/I79767729"

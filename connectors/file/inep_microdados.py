@@ -32,10 +32,15 @@ COLUMN_MAP = {
     "SG_UF_IES": "state",
     "CO_REGIAO_IES": "region_code",                   # 1=N,2=NE,3=SE,4=S,5=CO
     # Research indicators (available from 2019+)
-    "QT_DOC_EX_DOUT": "faculty_with_phd",
-    "QT_DOC_EX_TOTAL": "faculty_total",
-    "QT_CURSO": "n_courses",
-    "QT_MAT": "total_enrollment",
+    # Column names changed across Censo releases:
+    #   QT_DOC_EX_DOUT  — faculty with doctorate (stable across years)
+    #   QT_DOC_EXE      — active faculty total (2019+; earlier years: QT_DOC_EX_TOTAL)
+    #   QT_CURSO / QT_MAT — available only in course-level files, not IES-level
+    "QT_DOC_EX_DOUT":  "faculty_with_phd",
+    "QT_DOC_EXE":      "faculty_total",       # active faculty total (2023 name)
+    "QT_DOC_EX_TOTAL": "faculty_total",       # alternative name used in earlier years
+    "QT_CURSO":        "n_courses",
+    "QT_MAT":          "total_enrollment",
 }
 
 ORG_TYPE_MAP = {
@@ -146,8 +151,17 @@ class INEPMicrodadosConnector:
 
     def _normalise(self, raw: pd.DataFrame, year: int) -> pd.DataFrame:
         """Map raw Censo columns to the institution schema."""
-        # Identify which raw columns are actually present
-        available = {k: v for k, v in COLUMN_MAP.items() if k in raw.columns}
+        # Identify which raw columns are actually present.
+        # When multiple source columns map to the same target (e.g. QT_DOC_EXE /
+        # QT_DOC_EX_TOTAL both → faculty_total), keep only the first match to avoid
+        # duplicate columns after rename.
+        available: dict[str, str] = {}
+        seen_targets: set[str] = set()
+        for raw_col, target_col in COLUMN_MAP.items():
+            if raw_col in raw.columns and target_col not in seen_targets:
+                available[raw_col] = target_col
+                seen_targets.add(target_col)
+
         missing = [k for k in COLUMN_MAP if k not in raw.columns]
         if missing:
             logger.warning(f"Censo {year}: columns not found (may vary by year): {missing}")
@@ -173,11 +187,15 @@ class INEPMicrodadosConnector:
         # Normalise e-MEC code to string, zero-padded to 6 digits
         df["e_mec_code"] = df["e_mec_code"].astype(str).str.zfill(6)
 
+        # Coerce faculty counts to numeric (Censo may encode as strings)
+        for col in ("faculty_with_phd", "faculty_total"):
+            if col in df.columns:
+                df[col] = pd.to_numeric(df[col], errors="coerce")
+
         # Derived: PhD faculty share (useful for stratification)
         if "faculty_with_phd" in df.columns and "faculty_total" in df.columns:
-            df["phd_faculty_share"] = (
-                df["faculty_with_phd"] / df["faculty_total"].replace(0, pd.NA)
-            ).round(4)
+            denom = df["faculty_total"].where(df["faculty_total"] > 0)   # 0 → NaN
+            df["phd_faculty_share"] = (df["faculty_with_phd"] / denom).round(4)
 
         # Add source year
         df["censo_year"] = year
