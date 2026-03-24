@@ -1,0 +1,89 @@
+# connectors/api/crossref.py
+from __future__ import annotations
+
+import logging
+import time
+from typing import Any
+
+import httpx
+
+logger = logging.getLogger(__name__)
+
+_BASE = "https://api.crossref.org/works"
+_MAILTO = "justin.axelberg@usp.br"  # polite pool
+
+_BR_FUNDERS = {
+    "cnpq", "capes", "fapesp", "fapemig", "faperj", "finep",
+    "fundação de amparo", "conselho nacional", "coordenação de aperfeiçoamento",
+}
+
+
+class CrossrefConnector:
+    """Lightweight Crossref metadata validator. No API key required.
+
+    Role: validates funder presence, license declaration, document type,
+    and ROR affiliation coverage for a set of DOIs. Not a scored source.
+    """
+
+    source_id = "crossref"
+
+    def __init__(self, email: str = _MAILTO, rate_limit_seconds: float = 1.0) -> None:
+        self.email = email
+        self.rate_limit = rate_limit_seconds
+
+    def _get_work(self, doi: str) -> dict | None:
+        url = f"{_BASE}/{doi}"
+        try:
+            r = httpx.get(url, params={"mailto": self.email}, timeout=10)
+            if r.status_code == 404:
+                return None
+            r.raise_for_status()
+            time.sleep(self.rate_limit)
+            return r.json().get("message", {})
+        except Exception as exc:
+            logger.warning("Crossref lookup failed for %s: %s", doi, exc)
+            return None
+
+    def has_funder(self, work: dict) -> bool:
+        return bool(work.get("funder"))
+
+    def has_license(self, work: dict) -> bool:
+        return bool(work.get("license"))
+
+    def has_ror_affiliation(self, work: dict) -> bool:
+        for author in work.get("author") or []:
+            for aff in author.get("affiliation") or []:
+                for id_entry in aff.get("id") or []:
+                    if id_entry.get("id-type") == "ROR":
+                        return True
+        return False
+
+    def is_brazilian_funder(self, funder_name: str) -> bool:
+        lower = funder_name.lower()
+        return any(br in lower for br in _BR_FUNDERS)
+
+    def validate_doi(self, doi: str) -> dict | None:
+        """Return metadata quality dict for one DOI, or None if not found."""
+        work = self._get_work(doi)
+        if work is None:
+            return None
+        funders = work.get("funder") or []
+        return {
+            "doi": doi,
+            "funder_present": self.has_funder(work),
+            "brazilian_funder": any(
+                self.is_brazilian_funder(f.get("name", "")) for f in funders
+            ),
+            "license_present": self.has_license(work),
+            "ror_affiliation_present": self.has_ror_affiliation(work),
+            "document_type": work.get("type"),
+        }
+
+    def validate_batch(self, dois: list[str]) -> list[dict]:
+        """Validate a list of DOIs. Returns only successful results."""
+        results = []
+        for doi in dois:
+            result = self.validate_doi(doi)
+            if result:
+                results.append(result)
+        return results
