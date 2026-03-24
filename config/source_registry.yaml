@@ -1,0 +1,210 @@
+# Source registry — all evaluated sources, access mode, phase, status
+# access_mode: api | file | scrape | manual
+# phase: 1 | 2 | 3
+# status: active | pending | optional
+
+sources:
+
+  # --- BIBLIOMETRIC (international) ---
+  openalex:
+    name: "OpenAlex"
+    url: "https://openalex.org"
+    access_mode: api
+    phase: 1
+    status: active
+    barcelona_aligned: true
+    notes: "Free, open, no auth required. Rate limit: 10 req/s with email polite pool."
+
+  unpaywall:
+    name: "Unpaywall"
+    url: "https://unpaywall.org"
+    access_mode: api
+    phase: 1
+    status: active
+    barcelona_aligned: true
+    notes: "Free with email. DOI-based OA status lookup."
+
+  scopus:
+    name: "Scopus"
+    url: "https://www.scopus.com"
+    access_mode: api
+    phase: 2
+    status: pending
+    barcelona_aligned: false
+    notes: "Institutional API key required. Elsevier. Rate limits apply."
+
+  wos:
+    name: "Web of Science"
+    url: "https://www.webofscience.com"
+    access_mode: api
+    phase: 2
+    status: pending
+    barcelona_aligned: false
+    notes: "Institutional API key required. Clarivate."
+
+  dimensions:
+    name: "Dimensions"
+    url: "https://www.dimensions.ai"
+    access_mode: api
+    phase: 2
+    status: pending
+    barcelona_aligned: false
+    notes: "Free API tier available. Digital Science."
+
+  # --- NATIONAL (Brazil) ---
+  inep_microdados:
+    name: "INEP Microdados — Censo da Educação Superior"
+    url: "https://www.gov.br/inep/pt-br/acesso-a-informacao/dados-abertos/microdados"
+    access_mode: file
+    phase: 1
+    status: active
+    barcelona_aligned: true
+    notes: "Annual CSV. Master HEI registry and Coverage denominator."
+
+  lattes:
+    name: "Lattes (CNPq) via scriptLattes"
+    url: "https://lattes.cnpq.br"
+    access_mode: scrape
+    phase: 2
+    status: pending
+    barcelona_aligned: true
+    notes: "scriptLattes wrapper. Requires DOI enrichment step post-scrape."
+
+  sucupira:
+    name: "Plataforma Sucupira (CAPES)"
+    url: "https://sucupira.capes.gov.br"
+    access_mode: manual
+    phase: 2
+    status: pending
+    barcelona_aligned: true
+    notes: "Graduate program data. Bolsista assessment form."
+
+  dgp:
+    name: "Diretório de Grupos de Pesquisa (CNPq)"
+    url: "https://dgp.cnpq.br"
+    access_mode: scrape
+    phase: 3
+    status: pending
+    barcelona_aligned: true
+    notes: "Industry-academia partnership data. Brazil-specific."
+
+  scielo:
+    name: "SciELO"
+    url: "https://scielo.org"
+    access_mode: scrape
+    phase: 3
+    status: pending
+    barcelona_aligned: true
+    notes: "Diamond OA infrastructure reference case."
+
+  # --- REPOSITORIES ---
+  bdtd:
+    name: "BDTD — Biblioteca Digital Brasileira de Teses e Dissertações"
+    url: "https://bdtd.ibict.br"
+    access_mode: scrape
+    phase: 3
+    status: pending
+    barcelona_aligned: true
+    notes: "Theses and dissertations. IBICT aggregator."
+
+  opendoar:
+    name: "OpenDOAR"
+    url: "https://v2.sherpa.ac.uk/opendoar"
+    access_mode: api
+    phase: 1
+    status: active
+    barcelona_aligned: true
+    notes: "Directory of open access repositories. Maps institutional repos."
+
+  # --- INNOVATION & RESEARCH-INNOVATION LINK ---
+  the_lens:
+    name: "The Lens"
+    url: "https://www.lens.org"
+    access_mode: api
+    phase: 2
+    status: pending
+    barcelona_aligned: true
+    notes: "Primary innovation source. Papers + patents + citation links. Open."
+
+  inpi:
+    name: "INPI — Instituto Nacional da Propriedade Industrial"
+    url: "https://www.gov.br/inpi"
+    access_mode: manual
+    phase: 2
+    status: pending
+    barcelona_aligned: true
+    notes: "Brazilian patent authority. Ground truth for BR patents."
+
+  wipo:
+    name: "WIPO Patentscope"
+    url: "https://patentscope.wipo.int"
+    access_mode: api
+    phase: 2
+    status: pending
+    barcelona_aligned: true
+    notes: "International filings by BR inventors."
+
+  derwent:
+    name: "Derwent Innovation"
+    url: "https://www.derwentinnovation.com"
+    access_mode: manual
+    phase: 3
+    status: optional
+    barcelona_aligned: false
+    notes: "Proprietary. Secondary validation only if budget allows."
+
+  # --- IMPACT & OPEN ACCESS ---
+  altmetric:
+    name: "Altmetric"
+    url: "https://www.altmetric.com"
+    access_mode: api
+    phase: 2
+    status: pending
+    barcelona_aligned: false
+    notes: "Media mentions, policy citations, social attention."
+
+  ibge:
+    name: "IBGE"
+    url: "https://www.ibge.gov.br"
+    access_mode: api
+    phase: 2
+    status: pending
+    barcelona_aligned: true
+    notes: "Socioeconomic context overlay for social impact analysis."
+
+  datacite:
+    name: "DataCite"
+    url: "https://datacite.org"
+    access_mode: api
+    phase: 3
+    status: pending
+    barcelona_aligned: true
+    notes: "Software and research data citation."
+
+  # --- PREPRINTS ---
+  arxiv:
+    name: "arXiv"
+    url: "https://arxiv.org"
+    access_mode: api
+    phase: 3
+    status: pending
+    barcelona_aligned: true
+    notes: "Physics, CS, economics preprints."
+
+  biorxiv:
+    name: "bioRxiv / medRxiv"
+    url: "https://www.biorxiv.org"
+    access_mode: api
+    phase: 3
+    status: pending
+    barcelona_aligned: true
+    notes: "Life sciences preprints."
+
+  scielo_preprints:
+    name: "SciELO Preprints"
+    url: "https://preprints.scielo.org"
+    access_mode: scrape
+    phase: 3
+    status: pending
+    barcelona_aligned: true
+    notes: "Latin American preprints. Important for BR coverage."

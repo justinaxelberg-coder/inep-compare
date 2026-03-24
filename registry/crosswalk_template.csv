@@ -1,0 +1,6 @@
+e_mec_code,name,ror_id,isni,scopus_affiliation_id,dimensions_grid_id,openalex_institution_id,wikidata_qid,crosswalk_confidence,crosswalk_notes,validated_by
+000572,Universidade Federal do ABC,https://ror.org/028kg9j04,,60001430,grid.412368.a,https://openalex.org/I71715416,Q3350603,high,Scopus AF-ID and Dimensions GRID verified 2026-03,
+000097,Universidade Federal de São Paulo,https://ror.org/02k5swt12,,60014992,grid.411249.b,https://openalex.org/I88273585,Q1547573,high,Scopus AF-ID and Dimensions GRID verified 2026-03,
+000283,Universidade Federal do Pará,https://ror.org/03q9sr818,,60001890,grid.271300.7,https://openalex.org/I59606676,Q1547594,high,"Scopus AF-ID verified 2026-03; UFOPA/UNIFESSPA excluded. Dimensions GRID verified (Pará ≠ Paraná)",
+000524,Instituto Federal de Educação Ciência e Tecnologia de São Paulo,https://ror.org/005pn5z34,,60112684,grid.456464.1,https://openalex.org/I107371206,Q10319580,high,Scopus AF-ID verified 2026-03; Dimensions GRID verified 2026-03 (ROR query returned 0 — use GRID),
+001982,Pontifícia Universidade Católica de Campinas,https://ror.org/01wjxn842,,60029534,grid.442113.1,https://openalex.org/I79767729,,high,Scopus AF-ID and Dimensions GRID verified 2026-03,

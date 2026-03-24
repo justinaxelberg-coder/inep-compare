@@ -1,0 +1,75 @@
+# Sampling configuration for bibliometric source evaluation
+# Mode: census | stratified | spotlight
+mode: spotlight
+
+# Hard ceiling on records returned per institution per source per query.
+# When hit, the tool warns but does not crash — the ceiling is itself a data point.
+max_records_per_query: 500
+
+# Temporal window: 5-year window aligned with SINAES evaluation cycles
+temporal_window:
+  start_year: 2021
+  end_year: 2025
+
+# Field scope for first sprint (CAPES grande área)
+# Options: all | ciencias_saude | engenharias | ciencias_exatas | ciencias_humanas |
+#          ciencias_sociais_aplicadas | ciencias_biologicas | agrarias | linguistica_letras_artes
+field_scope: all
+
+# Spotlight sample — purposive selection for sprint 1
+# Deliberately avoids mega-universities (USP, UNICAMP, UFRJ) for tractability
+spotlight:
+  - e_mec_code: "572"         # UFABC — federal, research-active, small, well-identified in ROR
+    name: "Universidade Federal do ABC"
+    ror_id: "https://ror.org/028kg9j04"
+    openalex_id: "https://openalex.org/I71715416"
+    notes: "Modern federal university, strong STEM, manageable output volume"
+
+  - e_mec_code: "97"          # UNIFESP — federal, health sciences, tractable size
+    name: "Universidade Federal de São Paulo"
+    ror_id: "https://ror.org/02k5swt12"
+    openalex_id: "https://openalex.org/I88273585"
+    notes: "Health sciences focus, good international visibility, tests Ciências da Saúde"
+
+  - e_mec_code: "283"         # UFPA — regional federal, North region
+    name: "Universidade Federal do Pará"
+    ror_id: "https://ror.org/03q9sr818"
+    openalex_id: "https://openalex.org/I59606676"
+    notes: "North region, equity analysis anchor, tests regional coverage bias"
+
+  - e_mec_code: "524"         # IFSP — federal institute
+    name: "Instituto Federal de Educação, Ciência e Tecnologia de São Paulo"
+    ror_id: "https://ror.org/005pn5z34"
+    openalex_id: "https://openalex.org/I107371206"
+    notes: "IF category, tests IF visibility in international sources"
+
+  - e_mec_code: "1982"        # PUC-Campinas — mid-sized private
+    name: "Pontifícia Universidade Católica de Campinas"
+    ror_id: "https://ror.org/01wjxn842"
+    openalex_id: "https://openalex.org/I79767729"
+    notes: "Private university, tests private sector coverage"
+
+# LATAM comparators (phase 1 optional — include if API quota allows)
+latam_peers:
+  - name: "Universidad de Buenos Aires"
+    ror_id: "https://ror.org/02fxxat87"
+    country: "AR"
+
+  - name: "Universidad de Chile"
+    ror_id: "https://ror.org/01rej9z75"
+    country: "CL"
+
+  - name: "Universidad Nacional Autónoma de México"
+    ror_id: "https://ror.org/01tmp8f25"
+    country: "MX"
+
+# Unpaywall validation sample — max DOIs validated per institution
+# OpenAlex already carries Unpaywall OA data; this is spot-check validation only
+unpaywall_validation_sample: 100
+
+# Confidence tier thresholds (Wilson CI)
+confidence_tiers:
+  reliable:    200    # N >= 200: report estimate + 95% CI
+  moderate:    50     # 50 <= N < 200: flagged moderate confidence
+  low:         10     # 10 <= N < 50: flagged low confidence
+  insufficient: 0     # N < 10: suppress estimate, flag for manual assessment

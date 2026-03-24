@@ -1,0 +1,35 @@
+# LGPD compliance configuration
+# Lei Geral de Proteção de Dados Pessoais — Lei 13.709/2018
+
+# Researcher-level data is personal data under LGPD.
+# This tool processes researcher names and affiliations from Lattes.
+# All researcher-level outputs must be anonymised unless explicitly authorised.
+
+anonymise_researcher_output: true
+
+# Fields to anonymise in researcher-level exports
+researcher_anonymise_fields:
+  - name
+  - name_variants
+  - lattes_id       # treated as quasi-identifier
+
+# Fields safe to retain in aggregated/institutional outputs
+researcher_retain_aggregated:
+  - institution_id
+  - openalex_author_id   # pseudonymous
+  - orcid                # only if public on ORCID profile
+
+# Data retention: raw Lattes scrape data
+raw_data_retention_days: 90
+
+# Raw researcher data must not appear in:
+# - dashboard outputs
+# - exported CSV/JSON reports shared externally
+# - bolsista review queue (aggregate flags only)
+
+# Institutional-level data (e-MEC codes, institution names) is not personal
+# data and is not subject to anonymisation.
+
+legal_basis: "legitimate interest — public interest research (Art. 7, X and Art. 23, LGPD)"
+data_controller: "INEP consultancy research team"
+contact: "to be defined"
