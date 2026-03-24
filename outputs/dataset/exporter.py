@@ -289,6 +289,41 @@ class DatasetExporter:
                     f"{d.count_a}{a_flag} | {d.count_b}{b_flag} | {d.discrepancy_pct:.1%} |"
                 )
 
+        # SDG coverage section (conditional on enrichment file presence)
+        _sdg_files = sorted(Path("data/processed").glob("sdg_by_source_type_*.csv"))
+        if _sdg_files:
+            try:
+                sdg_df = pd.read_csv(_sdg_files[-1])
+                lines.append("\n## SDG Coverage by Source\n")
+                lines.append(sdg_df.to_markdown(index=False))
+                lines.append("")
+            except Exception as _e:
+                logger.warning("Could not render SDG section: %s", _e)
+
+        # Scopus SDG caveat
+        _meta_path = Path("data/processed") / "source_metadata.json"
+        if _meta_path.exists():
+            try:
+                _meta = json.loads(_meta_path.read_text())
+                if not _meta.get("scopus", {}).get("sdg_available", True):
+                    lines.append(
+                        "\n> ⚠ **Scopus SDG data not available** via standard API "
+                        "(requires SciVal). `sdg_coverage` scored as 0.0 for Scopus.\n"
+                    )
+            except Exception:
+                pass
+
+        # Geographic coverage section
+        _geo_files = sorted(Path("data/processed").glob("geographic_coverage_*.csv"))
+        if _geo_files:
+            try:
+                geo_df = pd.read_csv(_geo_files[-1])
+                lines.append("\n## Geographic Coverage Gap by Source\n")
+                lines.append(geo_df.to_markdown(index=False))
+                lines.append("")
+            except Exception as _e:
+                logger.warning("Could not render geographic section: %s", _e)
+
         # Structural gaps
         lines += [
             "", "---", "",
