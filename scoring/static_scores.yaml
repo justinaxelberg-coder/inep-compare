@@ -1,0 +1,144 @@
+# Static expert scores per source — dimensions not derivable from API data
+# Scale: 0.0 (worst) – 1.0 (best)
+# Reviewed: 2026-03 | Next review: 2027-03
+
+sources:
+  openalex:
+    accessibility:
+      barcelona_alignment: 1.0      # signatory, fully open
+      api_availability: 1.0         # free, documented, stable
+      licensing_model: 1.0          # CC0
+      cost_to_br_hei: 1.0           # free
+      practical_usability: 0.85     # excellent docs, minor rate limits
+    governance:
+      ownership_transparency: 0.95  # NumFOCUS / OurResearch, published roadmap
+      sustainability_risk: 0.80     # grant-funded but diversified
+      community_governance: 0.85    # open governance, community input
+      data_portability: 1.0         # full data dumps available
+    social_impact:
+      policy_citations: 0.30        # not yet tracked
+      public_engagement: 0.20       # not tracked
+      geographic_social_context: 0.60
+    reliability:
+      methodological_transparency: 0.95
+      reproducibility: 0.90
+
+  scopus:
+    accessibility:
+      barcelona_alignment: 0.10     # proprietary, opposes open infra
+      api_availability: 0.70        # API exists but key required, quota limited
+      licensing_model: 0.20         # subscription only
+      cost_to_br_hei: 0.20          # expensive; some CAPES coverage
+      practical_usability: 0.75
+    governance:
+      ownership_transparency: 0.60  # Elsevier/RELX, commercial
+      sustainability_risk: 0.70     # commercial entity — stable but costly
+      community_governance: 0.10    # no community governance
+      data_portability: 0.30        # limited bulk export
+    social_impact:
+      policy_citations: 0.40
+      public_engagement: 0.20
+      geographic_social_context: 0.40
+    reliability:
+      methodological_transparency: 0.70
+      reproducibility: 0.65
+
+  wos:
+    accessibility:
+      barcelona_alignment: 0.10
+      api_availability: 0.65
+      licensing_model: 0.20
+      cost_to_br_hei: 0.20
+      practical_usability: 0.70
+    governance:
+      ownership_transparency: 0.55  # Clarivate, private equity backed
+      sustainability_risk: 0.60
+      community_governance: 0.10
+      data_portability: 0.25
+    social_impact:
+      policy_citations: 0.45
+      public_engagement: 0.20
+      geographic_social_context: 0.35
+    reliability:
+      methodological_transparency: 0.75
+      reproducibility: 0.70
+
+  dimensions:
+    accessibility:
+      barcelona_alignment: 0.50     # free tier open; full access proprietary
+      api_availability: 0.75
+      licensing_model: 0.50
+      cost_to_br_hei: 0.60          # free tier sufficient for most uses
+      practical_usability: 0.80
+    governance:
+      ownership_transparency: 0.65  # Digital Science / Holtzbrinck
+      sustainability_risk: 0.65
+      community_governance: 0.20
+      data_portability: 0.50
+    social_impact:
+      policy_citations: 0.60        # Altmetric integration
+      public_engagement: 0.50
+      geographic_social_context: 0.55
+    reliability:
+      methodological_transparency: 0.80
+      reproducibility: 0.75
+
+  lens:
+    accessibility:
+      barcelona_alignment: 0.90     # Cambia open mission, patent data CC0
+      api_availability: 0.80
+      licensing_model: 0.85
+      cost_to_br_hei: 0.85          # free scholarly; patent needs registration
+      practical_usability: 0.75
+    governance:
+      ownership_transparency: 0.85  # Cambia, public benefit mission
+      sustainability_risk: 0.70
+      community_governance: 0.70
+      data_portability: 0.85
+    social_impact:
+      policy_citations: 0.20
+      public_engagement: 0.20
+      geographic_social_context: 0.50
+    reliability:
+      methodological_transparency: 0.80
+      reproducibility: 0.80
+
+  inep_microdados:
+    accessibility:
+      barcelona_alignment: 0.85     # government open data
+      api_availability: 0.30        # file download only, no API
+      licensing_model: 0.90
+      cost_to_br_hei: 1.0
+      practical_usability: 0.55     # CSV bulk, complex encoding
+    governance:
+      ownership_transparency: 1.0   # INEP / MEC
+      sustainability_risk: 0.85     # statutory obligation
+      community_governance: 0.40
+      data_portability: 0.80
+    social_impact:
+      policy_citations: 0.90        # primary policy source
+      public_engagement: 0.70
+      geographic_social_context: 0.95
+    reliability:
+      methodological_transparency: 0.90
+      reproducibility: 0.85
+
+  lattes:
+    accessibility:
+      barcelona_alignment: 0.60     # public but scrape-only; no open API
+      api_availability: 0.20        # no official API
+      licensing_model: 0.70
+      cost_to_br_hei: 0.90
+      practical_usability: 0.40     # scraping fragile; LGPD constraints
+    governance:
+      ownership_transparency: 0.90  # CNPq / MCTI
+      sustainability_risk: 0.75
+      community_governance: 0.30
+      data_portability: 0.35
+    social_impact:
+      policy_citations: 0.80
+      public_engagement: 0.60
+      geographic_social_context: 0.90
+    reliability:
+      methodological_transparency: 0.65
+      reproducibility: 0.50         # scraping reproducibility limited
