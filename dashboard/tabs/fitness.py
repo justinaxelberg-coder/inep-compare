@@ -5,7 +5,7 @@ import logging
 
 import pandas as pd
 import plotly.graph_objects as go
-from dash import Input, Output, dash_table, dcc, html
+from dash import Input, Output, State, dash_table, dcc, html
 
 logger = logging.getLogger(__name__)
 
@@ -56,12 +56,15 @@ def register_callbacks(app) -> None:
     @app.callback(
         Output("fitness-radar", "figure"),
         Input("fitness-source-dropdown", "value"),
-        Input("fitness-data-store", "data"),
+        State("fitness-data-store", "data"),
     )
     def update_radar(source: str, data_json: str) -> go.Figure:
         if not source or not data_json:
             return _empty_radar()
         df = pd.read_json(data_json, orient="records")
+        for col in DIMENSIONS:
+            if col in df.columns:
+                df[col] = pd.to_numeric(df[col], errors="coerce")
         rows = df[df["source"] == source]
         if rows.empty:
             return _empty_radar()
@@ -95,7 +98,7 @@ def _heatmap_figure(df: pd.DataFrame) -> go.Figure:
         y=pivot.index.tolist(),
         colorscale=_COLORSCALE,
         zmin=0, zmax=1,
-        text=[[f"{v:.2f}" for v in row] for row in pivot.values],
+        text=[[f"{v:.2f}" if v == v else "" for v in row] for row in pivot.values],
         texttemplate="%{text}",
         hovertemplate="Source: %{y}<br>Type: %{x}<br>Composite: %{z:.3f}<extra></extra>",
     ))
@@ -111,7 +114,8 @@ def _heatmap_figure(df: pd.DataFrame) -> go.Figure:
 
 def _radar_figure(source: str, means: pd.Series) -> go.Figure:
     labels = DIMENSIONS + [DIMENSIONS[0]]
-    values = [float(means.get(d, 0)) for d in DIMENSIONS] + [float(means.get(DIMENSIONS[0], 0))]
+    values = [float(means[d]) if d in means.index and means[d] == means[d] else 0.0 for d in DIMENSIONS]
+    values += [values[0]]
     fig = go.Figure(go.Scatterpolar(
         r=values, theta=labels, fill="toself", name=source, line_color="#1f77b4",
     ))
@@ -138,7 +142,7 @@ def _rankings_table(df: pd.DataFrame) -> html.Div:
         for rank, (_, row) in enumerate(sub.iterrows(), 1):
             rows.append({
                 "Rank": rank, "Institution Type": it, "Source": row["source"],
-                "Composite": f"{row['composite']:.3f}",
+                "Composite": f"{row['composite']:.2f}",
                 "Coverage": f"{row['coverage']:.3f}",
                 "Accessibility": f"{row['accessibility']:.3f}",
             })
