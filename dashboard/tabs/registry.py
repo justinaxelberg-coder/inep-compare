@@ -9,6 +9,8 @@ from dash import Input, Output, dash_table, dcc, html
 
 logger = logging.getLogger(__name__)
 
+_TOOLTIP_COLS = {"name", "abbreviation"}
+
 _SINAES_LABELS = {
     "federal_university":   "Federal University",
     "state_university":     "State University",
@@ -173,7 +175,10 @@ def _data_table(df: pd.DataFrame) -> dash_table.DataTable:
                     "maxWidth": "200px", "overflow": "hidden",
                     "textOverflow": "ellipsis"},
         style_header={"backgroundColor": "#222", "fontWeight": "bold", "color": "#fff"},
-        tooltip_data=[{col: {"value": str(row.get(col, "")), "type": "markdown"}
-                       for col in cols} for row in records],
+        tooltip_data=[
+            {col: {"value": str(row.get(col, "")), "type": "markdown"}
+             for col in cols if col in _TOOLTIP_COLS}
+            for row in records
+        ],
         tooltip_duration=None,
     )
