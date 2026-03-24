@@ -65,6 +65,35 @@ REGION_MAP = {
 }
 
 
+def to_sinaes_type(org_type: str, category: str) -> str:
+    """
+    Map INEP org_type × category to FitnessScorer institution type vocabulary.
+
+    SINAES types:
+      federal_university, state_university, private_university,
+      federal_institute, community_university, isolated_faculty, other
+    """
+    if category in ("instituto_federal", "cefet"):
+        return "federal_institute"
+    if org_type == "federal":
+        if category == "universidade":
+            return "federal_university"
+        return "other"
+    if org_type in ("estadual", "municipal"):
+        if category == "universidade":
+            return "state_university"
+        return "other"
+    if org_type == "privada_comunitaria":
+        if category in ("universidade", "centro_universitario"):
+            return "community_university"
+        return "isolated_faculty"
+    if org_type in ("privada_com_fins", "privada_sem_fins", "privada_especial"):
+        if category == "universidade":
+            return "private_university"
+        return "isolated_faculty"
+    return "other"
+
+
 class INEPMicrodadosConnector:
     """
     Parses INEP Censo da Educação Superior CSV files into the master HEI registry.
@@ -132,6 +161,14 @@ class INEPMicrodadosConnector:
             df["category"] = df["category_code"].map(CATEGORY_MAP)
         if "region_code" in df.columns:
             df["region"] = df["region_code"].map(REGION_MAP)
+
+        # Map to FitnessScorer vocabulary
+        if "org_type" in df.columns and "category" in df.columns:
+            df["sinaes_type"] = df.apply(
+                lambda r: to_sinaes_type(
+                    str(r.get("org_type", "")), str(r.get("category", ""))
+                ), axis=1
+            )
 
         # Normalise e-MEC code to string, zero-padded to 6 digits
         df["e_mec_code"] = df["e_mec_code"].astype(str).str.zfill(6)
