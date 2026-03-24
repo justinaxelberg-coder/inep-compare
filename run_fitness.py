@@ -142,6 +142,19 @@ def _load_oa(pattern: str, sinaes_map: dict | None = None) -> dict[str, dict[str
     return result
 
 
+def _load_dedup_scores(csv_dir: Path) -> dict[str, float]:
+    """Return {source: mean overlap_pct_min across all pairs involving that source}."""
+    files = sorted(csv_dir.glob("overlap_phase2_*.csv"))
+    if not files:
+        return {}
+    df = pd.read_csv(files[-1])
+    scores: dict[str, float] = {}
+    for source in pd.unique(df[["source_a", "source_b"]].values.ravel()):
+        mask = (df["source_a"] == source) | (df["source_b"] == source)
+        scores[str(source)] = float(df.loc[mask, "overlap_pct_min"].mean())
+    return scores
+
+
 def _load_convergence(pattern: str) -> dict:
     """Return {(src_a, src_b): {overlap_pct, divergence_pct}} from overlap CSV."""
     files = sorted(PROCESSED.glob(pattern))
@@ -175,8 +188,11 @@ def main() -> None:
     logger.info("Loading convergence data...")
     convergence = _load_convergence("overlap_phase2_*.csv")
 
+    logger.info("Loading dedup scores...")
+    dedup_scores = _load_dedup_scores(PROCESSED)
+
     logger.info(f"Building fitness matrix: {len(coverage)} sources")
-    matrix = scorer.build_matrix(coverage, oa, convergence)
+    matrix = scorer.build_matrix(coverage, oa, convergence, dedup_scores=dedup_scores)
     logger.info(f"  {len(matrix.rows)} source × institution-type profiles")
 
     csv_path    = exporter.export_fitness_matrix(matrix, run_id)

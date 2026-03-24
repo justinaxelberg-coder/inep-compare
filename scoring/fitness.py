@@ -121,16 +121,22 @@ class FitnessScorer:
         oa: dict,
         convergence: dict,
         patents: dict | None = None,
+        dedup_score: float = 0.0,
+        sdg_rate: float = 0.0,
+        diamond_oa_rate: float = 0.0,
+        geographic_bias: float | None = None,
+        nonacademic_coauth: float = 0.0,
     ) -> FitnessProfile:
         static = self.static.get(source_id, {})
 
-        cov_score  = self._score_coverage(coverage)
-        dq_score   = self._score_data_quality(coverage, convergence, source_id)
-        rel_score  = self._score_reliability(convergence, source_id, static)
-        acc_score  = self._score_accessibility(static)
-        si_score   = self._score_social_impact(oa, static)
-        gov_score  = self._score_governance(static)
-        inn_score  = self._score_innovation_link(patents)
+        coverage_score = self._score_coverage(coverage, geographic_bias=geographic_bias)
+        dq_score       = self._score_data_quality(coverage, convergence, source_id, dedup_score=dedup_score)
+        rel_score      = self._score_reliability(convergence, source_id, static)
+        acc_score      = self._score_accessibility(static)
+        si_score       = self._score_social_impact(oa, static, sdg_rate=sdg_rate, diamond_oa_rate=diamond_oa_rate)
+        gov_score      = self._score_governance(static)
+        inn_score      = self._score_innovation_link(patents, nonacademic_coauth=nonacademic_coauth)
+        cov_score      = coverage_score
 
         weights   = self.dim_w
         total_w   = sum(weights.values()) or 1.0
@@ -159,6 +165,7 @@ class FitnessScorer:
         oa_by_source_type: dict[str, dict[str, dict]],
         convergence: dict,
         patent_by_source_type: dict | None = None,
+        dedup_scores: dict[str, float] | None = None,
     ) -> FitnessMatrix:
         rows: list[FitnessProfile] = []
         for source_id, type_map in coverage_by_source_type.items():
@@ -168,11 +175,12 @@ class FitnessScorer:
                 profile = self.build_profile(
                     source_id=source_id, inst_type=inst_type,
                     coverage=cov, oa=oa, convergence=convergence, patents=patents,
+                    dedup_score=(dedup_scores or {}).get(source_id, 0.0),
                 )
                 rows.append(profile)
         return FitnessMatrix(rows=rows)
 
-    def _score_coverage(self, cov: dict) -> float:
+    def _score_coverage(self, cov: dict, geographic_bias: float | None = None) -> float:
         # NOTE: geographic_bias and equity_representation are declared in scoring_weights.yaml
         # but not yet computable from API data alone. Excluded from total_w intentionally.
         # TODO: add when INEP Microdados geographic data is integrated.
@@ -180,9 +188,13 @@ class FitnessScorer:
         keys = ("institutional_coverage", "field_coverage", "temporal_coverage", "language_coverage")
         total_w = sum(w.get(k, 0.25) for k in keys) or 1.0
         score = sum(w.get(k, 0.25) * float(cov.get(k, 0)) for k in keys)
+        if geographic_bias is not None:  # None = registry absent, skip; 0.0 = computed as zero, include
+            gb_w = w.get("geographic_bias", 0.0)
+            score += gb_w * geographic_bias
+            total_w += gb_w
         return min(1.0, score / total_w)
 
-    def _score_data_quality(self, cov: dict, convergence: dict, source_id: str) -> float:
+    def _score_data_quality(self, cov: dict, convergence: dict, source_id: str, dedup_score: float = 0.0) -> float:
         doi_rate     = float(cov.get("doi_coverage_rate", 0.5))
         overlap_vals = [v.get("overlap_pct", 0) for k, v in convergence.items()
                         if source_id in k]
@@ -193,11 +205,16 @@ class FitnessScorer:
         w = self.sub_w.get("data_quality", {})
         total_w = (w.get("completeness", 0.30) + w.get("disambiguation_quality", 0.30) +
                    w.get("timeliness", 0.20)) or 1.0
-        return min(1.0, (
+        score = (
             w.get("completeness", 0.30)           * doi_rate +
             w.get("disambiguation_quality", 0.30) * avg_overlap +
             w.get("timeliness", 0.20)             * timeliness
-        ) / total_w)
+        )
+        if dedup_score > 0.0:
+            dedup_w = w.get("deduplication", 0.0)
+            score += dedup_w * dedup_score
+            total_w += dedup_w
+        return min(1.0, score / total_w)
 
     def _score_reliability(self, convergence: dict, source_id: str, static: dict) -> float:
         # NOTE: temporal_stability (weight 0.25) requires multi-year comparison runs.
@@ -226,7 +243,7 @@ class FitnessScorer:
         total_w = sum(w.get(k, 0.2) for k in keys) or 1.0
         return min(1.0, sum(w.get(k, 0.2) * float(acc.get(k, 0.5)) for k in keys) / total_w)
 
-    def _score_social_impact(self, oa: dict, static: dict) -> float:
+    def _score_social_impact(self, oa: dict, static: dict, sdg_rate: float = 0.0, diamond_oa_rate: float = 0.0) -> float:
         # NOTE: sdg_coverage (weight 0.25) is declared in YAML but excluded here —
         # SDG tagging is available in OpenAlex/Dimensions but not yet aggregated into
         # the social_impact input dict. TODO: add sdg_rate field to OA results.
@@ -238,12 +255,21 @@ class FitnessScorer:
         w = self.sub_w.get("social_impact", {})
         total_w = (w.get("oa_percentage", 0.20) + w.get("policy_citations", 0.20) +
                    w.get("public_engagement", 0.20) + w.get("geographic_social_context", 0.15)) or 1.0
-        return min(1.0, (
+        score = (
             w.get("oa_percentage", 0.20)             * oa_rate +
             w.get("policy_citations", 0.20)          * policy +
             w.get("public_engagement", 0.20)         * engage +
             w.get("geographic_social_context", 0.15) * geo
-        ) / total_w)
+        )
+        if sdg_rate > 0.0:
+            sdg_w = w.get("sdg_coverage", 0.0)
+            score += sdg_w * sdg_rate
+            total_w += sdg_w
+        if diamond_oa_rate > 0.0:
+            dia_w = w.get("diamond_oa", 0.0)
+            score += dia_w * diamond_oa_rate
+            total_w += dia_w
+        return min(1.0, score / total_w)
 
     def _score_governance(self, static: dict) -> float:
         gov = static.get("governance", {})
@@ -253,21 +279,28 @@ class FitnessScorer:
         total_w = sum(w.get(k, 0.25) for k in keys) or 1.0
         return min(1.0, sum(w.get(k, 0.25) * float(gov.get(k, 0.5)) for k in keys) / total_w)
 
-    def _score_innovation_link(self, patents: dict | None) -> float:
-        if not patents:
+    def _score_innovation_link(self, patents: dict | None, nonacademic_coauth: float = 0.0) -> float:
+        w = self.sub_w.get("innovation_link", {})
+        if not patents and nonacademic_coauth <= 0.0:
             return 0.0
-        w          = self.sub_w.get("innovation_link", {})
-        total      = patents.get("patent_count", 0)
-        intl       = patents.get("intl_patent_families", 0)
-        links      = patents.get("unique_npl_papers", 0)
-        pat_score  = min(1.0, total / 50)
-        intl_score = min(1.0, intl  / 20)
-        link_score = min(1.0, links / 20)
-        total_w = (w.get("npl_link_rate", 0.40) +
-                   w.get("patent_count_score", 0.30) +
-                   w.get("intl_family_score", 0.30)) or 1.0
-        return min(1.0, (
-            w.get("npl_link_rate", 0.40)      * link_score +
-            w.get("patent_count_score", 0.30) * pat_score +
-            w.get("intl_family_score", 0.30)  * intl_score
-        ) / total_w)
+        total_w = 0.0
+        score   = 0.0
+        if patents:
+            total      = patents.get("patent_count", 0)
+            intl       = patents.get("intl_patent_families", 0)
+            links      = patents.get("unique_npl_papers", 0)
+            pat_score  = min(1.0, total / 50)
+            intl_score = min(1.0, intl  / 20)
+            link_score = min(1.0, links / 20)
+            npl_w  = w.get("npl_link_rate", 0.40)
+            pat_w  = w.get("patent_count_score", 0.30)
+            intl_w = w.get("intl_family_score", 0.30)
+            score   += npl_w * link_score + pat_w * pat_score + intl_w * intl_score
+            total_w += npl_w + pat_w + intl_w
+        if nonacademic_coauth > 0.0:
+            coauth_w = w.get("nonacademic_coauth", 0.0)
+            score   += coauth_w * nonacademic_coauth
+            total_w += coauth_w
+        if total_w == 0.0:
+            return 0.0
+        return min(1.0, score / total_w)

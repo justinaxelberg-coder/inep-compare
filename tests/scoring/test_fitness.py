@@ -143,3 +143,53 @@ def test_export_fitness_matrix_sqlite(tmp_path):
     with sqlite3.connect(db_path) as conn:
         rows = conn.execute("SELECT * FROM fitness_matrix").fetchall()
     assert len(rows) == 2
+
+def test_dedup_score_wired():
+    scorer = FitnessScorer()
+    profile = scorer.build_profile(
+        "openalex", "federal_university",
+        coverage={"institutional_coverage": 0.8, "field_coverage": 0.7,
+                  "temporal_coverage": 0.9, "language_coverage": 0.6},
+        oa={"oa_rate": 0.5},
+        convergence={"inter_source_agreement": 0.7, "doi_rate": 0.9},
+        dedup_score=0.85,
+    )
+    assert profile.data_quality > 0.0
+
+def test_sdg_rate_raises_social_impact():
+    scorer = FitnessScorer()
+    base = dict(
+        source_id="openalex", inst_type="federal_university",
+        coverage={"institutional_coverage": 0.8, "field_coverage": 0.7,
+                  "temporal_coverage": 0.9, "language_coverage": 0.6},
+        oa={"oa_rate": 0.5},
+        convergence={"inter_source_agreement": 0.7, "doi_rate": 0.9},
+    )
+    p_with = scorer.build_profile(**base, sdg_rate=0.80)
+    p_without = scorer.build_profile(**base, sdg_rate=0.0)
+    assert p_with.social_impact > p_without.social_impact
+
+def test_diamond_oa_rate_wired():
+    scorer = FitnessScorer()
+    p = scorer.build_profile(
+        "openalex", "federal_university",
+        coverage={"institutional_coverage": 0.8, "field_coverage": 0.7,
+                  "temporal_coverage": 0.9, "language_coverage": 0.6},
+        oa={"oa_rate": 0.5},
+        convergence={"inter_source_agreement": 0.7, "doi_rate": 0.9},
+        diamond_oa_rate=0.30,
+    )
+    assert 0.0 <= p.social_impact <= 1.0
+
+def test_nonacademic_coauth_wired():
+    scorer = FitnessScorer()
+    base = dict(
+        source_id="openalex", inst_type="federal_university",
+        coverage={"institutional_coverage": 0.8, "field_coverage": 0.7,
+                  "temporal_coverage": 0.9, "language_coverage": 0.6},
+        oa={"oa_rate": 0.5},
+        convergence={"inter_source_agreement": 0.7, "doi_rate": 0.9},
+    )
+    p_high = scorer.build_profile(**base, nonacademic_coauth=0.80)
+    p_low  = scorer.build_profile(**base, nonacademic_coauth=0.0)
+    assert p_high.innovation_link > p_low.innovation_link
