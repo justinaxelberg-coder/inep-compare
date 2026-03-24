@@ -25,8 +25,8 @@ import yaml
 
 logger = logging.getLogger(__name__)
 
-_STATIC_PATH  = Path("scoring/static_scores.yaml")
-_WEIGHTS_PATH = Path("config/scoring_weights.yaml")
+_STATIC_PATH  = Path(__file__).parent / "static_scores.yaml"
+_WEIGHTS_PATH = Path(__file__).parents[1] / "config" / "scoring_weights.yaml"
 
 
 def _load_yaml(path: Path) -> dict:
@@ -109,8 +109,9 @@ class FitnessScorer:
         self.static  = _load_yaml(static_path).get("sources", {})
         raw_w        = _load_yaml(weights_path)
         self.dim_w   = raw_w.get("dimension_weights", {})
-        self.sub_w   = {k: raw_w[k] for k in raw_w if k not in
-                        ("dimension_weights", "confidence_tiers", "divergence_threshold")}
+        _DIMENSION_KEYS = {"coverage", "data_quality", "reliability", "accessibility",
+                           "social_impact", "governance", "innovation_link"}
+        self.sub_w = {k: raw_w[k] for k in raw_w if k in _DIMENSION_KEYS}
 
     def build_profile(
         self,
@@ -172,6 +173,9 @@ class FitnessScorer:
         return FitnessMatrix(rows=rows)
 
     def _score_coverage(self, cov: dict) -> float:
+        # NOTE: geographic_bias and equity_representation are declared in scoring_weights.yaml
+        # but not yet computable from API data alone. Excluded from total_w intentionally.
+        # TODO: add when INEP Microdados geographic data is integrated.
         w = self.sub_w.get("coverage", {})
         keys = ("institutional_coverage", "field_coverage", "temporal_coverage", "language_coverage")
         total_w = sum(w.get(k, 0.25) for k in keys) or 1.0
@@ -183,6 +187,8 @@ class FitnessScorer:
         overlap_vals = [v.get("overlap_pct", 0) for k, v in convergence.items()
                         if source_id in k]
         avg_overlap  = sum(overlap_vals) / len(overlap_vals) if overlap_vals else 0.5
+        # timeliness = 1.0 because all queries use the same temporal window.
+        # TODO: derive from date_published distribution when longitudinal data available.
         timeliness   = 1.0
         w = self.sub_w.get("data_quality", {})
         total_w = (w.get("completeness", 0.30) + w.get("disambiguation_quality", 0.30) +
@@ -194,6 +200,8 @@ class FitnessScorer:
         ) / total_w)
 
     def _score_reliability(self, convergence: dict, source_id: str, static: dict) -> float:
+        # NOTE: temporal_stability (weight 0.25) requires multi-year comparison runs.
+        # Excluded from scoring until longitudinal data is available.
         overlap_vals = [v.get("overlap_pct", 0) for k, v in convergence.items()
                         if source_id in k]
         inter_src    = sum(overlap_vals) / len(overlap_vals) if overlap_vals else 0.5
@@ -219,6 +227,9 @@ class FitnessScorer:
         return min(1.0, sum(w.get(k, 0.2) * float(acc.get(k, 0.5)) for k in keys) / total_w)
 
     def _score_social_impact(self, oa: dict, static: dict) -> float:
+        # NOTE: sdg_coverage (weight 0.25) is declared in YAML but excluded here —
+        # SDG tagging is available in OpenAlex/Dimensions but not yet aggregated into
+        # the social_impact input dict. TODO: add sdg_rate field to OA results.
         oa_rate   = float(oa.get("oa_rate", 0))
         si_static = static.get("social_impact", {})
         policy    = float(si_static.get("policy_citations", 0.2))
@@ -252,15 +263,11 @@ class FitnessScorer:
         pat_score  = min(1.0, total / 50)
         intl_score = min(1.0, intl  / 20)
         link_score = min(1.0, links / 20)
-        # Weight mapping:
-        #   patent_publication_links → paper-patent NPL link rate
-        #   br_inventor_coverage     → patent count (HEI as assignee)
-        #   hei_assignee_coverage    → international family reach
-        total_w = (w.get("patent_publication_links", 0.40) +
-                   w.get("br_inventor_coverage", 0.30) +
-                   w.get("hei_assignee_coverage", 0.30)) or 1.0
+        total_w = (w.get("npl_link_rate", 0.40) +
+                   w.get("patent_count_score", 0.30) +
+                   w.get("intl_family_score", 0.30)) or 1.0
         return min(1.0, (
-            w.get("patent_publication_links", 0.40) * link_score +
-            w.get("br_inventor_coverage", 0.30)     * pat_score +
-            w.get("hei_assignee_coverage", 0.30)    * intl_score
+            w.get("npl_link_rate", 0.40)      * link_score +
+            w.get("patent_count_score", 0.30) * pat_score +
+            w.get("intl_family_score", 0.30)  * intl_score
         ) / total_w)
