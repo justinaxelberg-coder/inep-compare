@@ -181,7 +181,7 @@ def run():
                 records = []
 
             total = getattr(connector, "last_total_count", None)
-            ceiling_hit = len(records) >= max_r
+            ceiling_hit = (max_r is not None) and (len(records) >= max_r)
             records_by_source[source_id][e_mec] = records
 
             if ceiling_hit and total:
