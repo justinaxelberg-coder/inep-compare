@@ -5,6 +5,9 @@ config/secrets.local.yaml
 # Data — large files
 data/raw/
 data/processed/
+registry/institutions.csv
+registry/crosswalk_enriched.csv
+data/raw/inep/
 
 # Python
 __pycache__/

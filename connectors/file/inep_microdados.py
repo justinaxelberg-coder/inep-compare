@@ -209,3 +209,65 @@ class INEPMicrodadosConnector:
             "by_region": df["region"].value_counts().to_dict() if "region" in df.columns else {},
             "with_ror_id": int(df["ror_id"].notna().sum()) if "ror_id" in df.columns else 0,
         }
+
+    def download(self, year: int = 2023, force: bool = False) -> Path:
+        """
+        Download the Censo IES CSV for the given year from INEP's open data portal.
+        Fetches the ZIP, extracts only the IES-level CSV, saves to self.data_dir.
+
+        Args:
+            year:  Censo year (2019–2023 confirmed available)
+            force: Re-download even if file already exists
+
+        Returns: Path to the extracted IES CSV
+        """
+        import io
+        import zipfile
+        import httpx
+
+        # Check if already downloaded
+        existing = self._find_censo_file(year)
+        if existing and not force:
+            logger.info(f"Censo {year} already downloaded: {existing}")
+            return existing
+
+        url = (
+            f"https://download.inep.gov.br/microdados/"
+            f"microdados_censo_da_educacao_superior_{year}.zip"
+        )
+        logger.info(f"Downloading Censo {year} from {url}")
+
+        try:
+            with httpx.Client(timeout=300, follow_redirects=True) as client:
+                response = client.get(url)
+                response.raise_for_status()
+        except httpx.HTTPError as e:
+            raise RuntimeError(
+                f"Failed to download Censo {year}: {e}\n"
+                f"Download manually from: https://www.gov.br/inep/pt-br/acesso-a-informacao/"
+                f"dados-abertos/microdados/censo-da-educacao-superior\n"
+                f"Place the IES CSV in: {self.data_dir}"
+            ) from e
+
+        logger.info(f"Downloaded {len(response.content) / 1e6:.1f} MB — extracting IES file")
+
+        with zipfile.ZipFile(io.BytesIO(response.content)) as zf:
+            ies_files = [
+                name for name in zf.namelist()
+                if "IES" in name.upper() and name.upper().endswith(".CSV")
+                and "CURSO" not in name.upper()
+                and "DOCENTE" not in name.upper()
+                and "ALUNO" not in name.upper()
+            ]
+            if not ies_files:
+                raise RuntimeError(
+                    f"No IES CSV found in Censo {year} ZIP. "
+                    f"Files in ZIP: {zf.namelist()}"
+                )
+            ies_name = ies_files[0]
+            out_path = self.data_dir / Path(ies_name).name
+            with zf.open(ies_name) as src, open(out_path, "wb") as dst:
+                dst.write(src.read())
+
+        logger.info(f"Censo {year} IES file saved: {out_path}")
+        return out_path
