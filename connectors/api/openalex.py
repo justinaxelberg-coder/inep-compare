@@ -243,6 +243,19 @@ class OpenAlexConnector(BaseConnector):
             "funding": funding,
             "sdgs": sdgs,               # SDG alignment — key for social impact scoring
             "patent_citations": [],     # enriched by The Lens connector
+            "affiliation_types": [
+                list({
+                    inst.get("type", "unknown")
+                    for inst in authorship.get("institutions", [])
+                    if inst.get("type")
+                })
+                for authorship in raw.get("authorships", [])
+            ],
+            "ror_resolved": any(
+                inst.get("id") is not None
+                for authorship in raw.get("authorships", [])
+                for inst in authorship.get("institutions", [])
+            ),
             "source_url": f"https://openalex.org/{raw.get('id', '').split('/')[-1]}",
             "retrieved_at": datetime.now(timezone.utc).isoformat(),
         }
