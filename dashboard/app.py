@@ -19,6 +19,7 @@ from dashboard.data_loader import (
 from dashboard.tabs import fitness as fitness_tab
 from dashboard.tabs import convergence as convergence_tab
 from dashboard.tabs import registry as registry_tab
+from dashboard.tabs import enrichment as enrichment_tab
 
 logging.basicConfig(
     level=logging.INFO,
@@ -43,6 +44,12 @@ _overlap_df, _divs_df = load_convergence(csv_dir=_PROCESSED)
 
 logger.info("Loading institution registry...")
 _registry_df = load_registry(csv_dir=_REGISTRY)
+
+logger.info("Loading enrichment data...")
+from dashboard.data_loader import load_geographic, load_sdg, load_source_metadata
+_geo_df      = load_geographic(csv_dir=_PROCESSED)
+_sdg_df      = load_sdg(csv_dir=_PROCESSED)
+_metadata    = load_source_metadata(processed_dir=_PROCESSED)
 
 logger.info(
     "Data ready: %d fitness rows, %d overlap rows, %d institutions",
@@ -78,6 +85,8 @@ app.layout = dbc.Container(
                         style={"color": "#ccc"}, selected_style={"color": "#fff"}),
                 dcc.Tab(label="Registry Map",         value="tab-registry",
                         style={"color": "#ccc"}, selected_style={"color": "#fff"}),
+                dcc.Tab(label="Enrichment",           value="tab-enrichment",
+                        style={"color": "#ccc"}, selected_style={"color": "#fff"}),
             ],
         ),
         html.Div(id="tab-content", className="mt-2"),
@@ -96,12 +105,15 @@ def render_tab(tab: str):
         return convergence_tab.layout(_overlap_df, _divs_df)
     if tab == "tab-registry":
         return registry_tab.layout(_registry_df)
+    if tab == "tab-enrichment":
+        return enrichment_tab.layout(_geo_df, _sdg_df, _metadata)
     return html.P("Unknown tab.", className="text-muted")
 
 
 fitness_tab.register_callbacks(app)
 convergence_tab.register_callbacks(app)
 registry_tab.register_callbacks(app)
+enrichment_tab.register_callbacks(app)
 
 
 if __name__ == "__main__":

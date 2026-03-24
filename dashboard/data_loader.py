@@ -141,3 +141,52 @@ def _read_csvs(
     except Exception as exc:
         logger.warning(f"{label} CSV load failed: {exc}")
         return pd.DataFrame(columns=required_cols)
+
+
+def load_geographic(csv_dir: Path | None = None) -> pd.DataFrame:
+    """Return geographic coverage gap DataFrame.
+    Columns: source, region, coverage_gap, output_gap, geographic_bias_score
+    """
+    csv_dir = Path(csv_dir) if csv_dir else _DEFAULT_PROCESSED
+    files = sorted(Path(csv_dir).glob("geographic_coverage_*.csv"))
+    if not files:
+        logger.warning("No geographic_coverage_*.csv found")
+        return pd.DataFrame(columns=["source","region","coverage_gap","output_gap","geographic_bias_score"])
+    try:
+        df = pd.read_csv(files[-1])
+        logger.info("Loaded %d geographic rows from %s", len(df), files[-1].name)
+        return df
+    except Exception as exc:
+        logger.warning("Geographic load failed: %s", exc)
+        return pd.DataFrame(columns=["source","region","coverage_gap","output_gap","geographic_bias_score"])
+
+
+def load_sdg(csv_dir: Path | None = None) -> pd.DataFrame:
+    """Return SDG coverage DataFrame. Empty if enrichment not yet run.
+    Columns: source, inst_type, sdg_goal, sdg_label, rate, n_tagged, n_total
+    """
+    csv_dir = Path(csv_dir) if csv_dir else _DEFAULT_PROCESSED
+    files = sorted(Path(csv_dir).glob("sdg_by_source_type_*.csv"))
+    if not files:
+        logger.info("No sdg_by_source_type_*.csv found — SDG tab will show empty state")
+        return pd.DataFrame(columns=["source","inst_type","sdg_goal","sdg_label","rate","n_tagged","n_total"])
+    try:
+        df = pd.read_csv(files[-1])
+        logger.info("Loaded %d SDG rows from %s", len(df), files[-1].name)
+        return df
+    except Exception as exc:
+        logger.warning("SDG load failed: %s", exc)
+        return pd.DataFrame(columns=["source","inst_type","sdg_goal","sdg_label","rate","n_tagged","n_total"])
+
+
+def load_source_metadata(processed_dir: Path | None = None) -> dict:
+    """Return source_metadata.json as dict. Empty dict if absent."""
+    import json
+    path = (Path(processed_dir) if processed_dir else _DEFAULT_PROCESSED) / "source_metadata.json"
+    if not path.exists():
+        return {}
+    try:
+        return json.loads(path.read_text())
+    except Exception as exc:
+        logger.warning("source_metadata.json load failed: %s", exc)
+        return {}
