@@ -67,10 +67,11 @@ class DimensionsConnector(BaseConnector):
         username: str | None = None,
         password: str | None = None,
         cache_dir: str = "data/raw",
-        max_records: int = 500,
+        max_records: int | None = 500,
         rate_limit_seconds: float = 2.0,   # conservative: 30 req/min free tier
     ):
-        super().__init__(cache_dir=cache_dir, max_records=max_records,
+        super().__init__(cache_dir=cache_dir,
+                         max_records=max_records if max_records is not None else float("inf"),
                          rate_limit_seconds=rate_limit_seconds)
         self.api_key = api_key or os.environ.get("DIMENSIONS_API_KEY", "")
         self.username = username or os.environ.get("DIMENSIONS_USERNAME", "")

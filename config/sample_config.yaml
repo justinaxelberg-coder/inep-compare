@@ -4,12 +4,12 @@ mode: spotlight
 
 # Hard ceiling on records returned per institution per source per query.
 # When hit, the tool warns but does not crash — the ceiling is itself a data point.
-max_records_per_query: 500
+max_records_per_query: ~
 
 # Temporal window: 5-year window aligned with SINAES evaluation cycles
 temporal_window:
-  start_year: 2021
-  end_year: 2025
+  start_year: 2023
+  end_year: 2023
 
 # Field scope for first sprint (CAPES grande área)
 # Options: all | ciencias_saude | engenharias | ciencias_exatas | ciencias_humanas |

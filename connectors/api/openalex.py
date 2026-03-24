@@ -50,10 +50,11 @@ class OpenAlexConnector(BaseConnector):
         self,
         email: str | None = None,
         cache_dir: str = "data/raw",
-        max_records: int = 500,
+        max_records: int | None = 500,
         rate_limit_seconds: float = 0.5,   # polite pool allows ~10 req/s
     ):
-        super().__init__(cache_dir=cache_dir, max_records=max_records,
+        super().__init__(cache_dir=cache_dir,
+                         max_records=max_records if max_records is not None else float("inf"),
                          rate_limit_seconds=rate_limit_seconds)
         # Email enables polite pool (higher rate limits)
         self.email = email or os.environ.get("OPENALEX_EMAIL", "")

@@ -41,10 +41,11 @@ accessibility:
 
 social_impact:
   sdg_coverage: 0.25
-  policy_citations: 0.20
-  public_engagement: 0.20
   oa_percentage: 0.20
+  policy_citations: 0.15
+  public_engagement: 0.15
   geographic_social_context: 0.15
+  diamond_oa: 0.10
 
 governance:
   ownership_transparency: 0.25
@@ -53,9 +54,10 @@ governance:
   data_portability: 0.25
 
 innovation_link:
-  npl_link_rate: 0.40        # paper-patent NPL back-references (research→innovation bridge)
-  patent_count_score: 0.30   # HEI as patent assignee (institutional IP output)
-  intl_family_score: 0.30    # international patent families (global reach)
+  npl_link_rate: 0.35
+  patent_count_score: 0.25
+  intl_family_score: 0.30
+  nonacademic_coauth: 0.10
 
 # Confidence tier thresholds (N = number of records)
 # Must match sample_config.yaml
