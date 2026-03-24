@@ -104,53 +104,90 @@ def test_fitness_falls_back_to_csv_when_db_absent(fitness_csv):
         csv_dir=fitness_csv,
     )
     assert len(df) == 1
+
+
+def test_fitness_csv_fallback_source_name(fitness_csv):
+    df = load_fitness_profiles(
+        db_path=fitness_csv / "nonexistent.db",
+        csv_dir=fitness_csv,
+    )
     assert df.iloc[0]["source"] == "scopus"
 
 
-def test_fitness_returns_empty_df_when_nothing_present(tmp_path):
+def test_fitness_empty_returns_dataframe(tmp_path):
     df = load_fitness_profiles(db_path=tmp_path / "x.db", csv_dir=tmp_path)
     assert isinstance(df, pd.DataFrame)
+
+
+def test_fitness_empty_has_correct_columns(tmp_path):
+    df = load_fitness_profiles(db_path=tmp_path / "x.db", csv_dir=tmp_path)
     assert list(df.columns) == FITNESS_COLUMNS
+
+
+def test_fitness_empty_has_zero_rows(tmp_path):
+    df = load_fitness_profiles(db_path=tmp_path / "x.db", csv_dir=tmp_path)
     assert len(df) == 0
 
 
 # --- load_convergence ---
 
-def test_convergence_loads_overlap_and_divergences(overlap_csv):
-    overlap, divs = load_convergence(csv_dir=overlap_csv)
+def test_convergence_loads_overlap(overlap_csv):
+    overlap, _ = load_convergence(csv_dir=overlap_csv)
     assert len(overlap) >= 1
+
+
+def test_convergence_loads_divergences(overlap_csv):
+    _, divs = load_convergence(csv_dir=overlap_csv)
     assert len(divs) >= 1
 
 
 def test_convergence_overlap_has_required_columns(overlap_csv):
     overlap, _ = load_convergence(csv_dir=overlap_csv)
-    for col in CONVERGENCE_COLUMNS:
-        assert col in overlap.columns
+    assert set(CONVERGENCE_COLUMNS).issubset(overlap.columns)
 
 
-def test_convergence_returns_empty_dfs_when_absent(tmp_path):
-    overlap, divs = load_convergence(csv_dir=tmp_path)
+def test_convergence_empty_overlap_is_dataframe(tmp_path):
+    overlap, _ = load_convergence(csv_dir=tmp_path)
     assert isinstance(overlap, pd.DataFrame)
+
+
+def test_convergence_empty_divs_is_dataframe(tmp_path):
+    _, divs = load_convergence(csv_dir=tmp_path)
     assert isinstance(divs, pd.DataFrame)
+
+
+def test_convergence_empty_overlap_has_zero_rows(tmp_path):
+    overlap, _ = load_convergence(csv_dir=tmp_path)
     assert len(overlap) == 0
+
+
+def test_convergence_empty_divs_has_zero_rows(tmp_path):
+    _, divs = load_convergence(csv_dir=tmp_path)
     assert len(divs) == 0
 
 
 # --- load_registry ---
 
-def test_registry_loads_institutions(registry_csv):
+def test_registry_loads_correct_count(registry_csv):
     df = load_registry(csv_dir=registry_csv)
     assert len(df) == 1
+
+
+def test_registry_loads_sinaes_type(registry_csv):
+    df = load_registry(csv_dir=registry_csv)
     assert df.iloc[0]["sinaes_type"] == "federal_university"
 
 
 def test_registry_has_required_columns(registry_csv):
     df = load_registry(csv_dir=registry_csv)
-    for col in REGISTRY_COLUMNS:
-        assert col in df.columns
+    assert set(REGISTRY_COLUMNS).issubset(df.columns)
 
 
-def test_registry_returns_empty_df_when_absent(tmp_path):
+def test_registry_empty_is_dataframe(tmp_path):
     df = load_registry(csv_dir=tmp_path)
     assert isinstance(df, pd.DataFrame)
+
+
+def test_registry_empty_has_zero_rows(tmp_path):
+    df = load_registry(csv_dir=tmp_path)
     assert len(df) == 0
