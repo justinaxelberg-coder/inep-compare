@@ -2,10 +2,10 @@ import pytest
 from scoring.fitness import FitnessProfile, FitnessScorer, FitnessMatrix
 
 MOCK_COVERAGE = {
-    "openalex": {"federal_university": {"institution_coverage": 0.95, "field_coverage": 0.85,
+    "openalex": {"federal_university": {"institutional_coverage": 0.95, "field_coverage": 0.85,
                   "temporal_coverage": 1.0, "language_coverage": 0.70, "record_count": 450,
                   "doi_coverage_rate": 0.90}},
-    "scopus":   {"federal_university": {"institution_coverage": 0.80, "field_coverage": 0.75,
+    "scopus":   {"federal_university": {"institutional_coverage": 0.80, "field_coverage": 0.75,
                   "temporal_coverage": 1.0, "language_coverage": 0.50, "record_count": 300,
                   "doi_coverage_rate": 0.85}},
 }
