@@ -103,3 +103,43 @@ def test_patents_increase_innovation_score():
                                     MOCK_OA["openalex"]["federal_university"],
                                     MOCK_CONVERGENCE, patents=patents)
     assert profile["innovation_link"] > 0.0
+
+
+# --- add these at the bottom of tests/scoring/test_fitness.py ---
+from outputs.dataset.exporter import DatasetExporter
+import pandas as pd
+from pathlib import Path
+
+def test_export_fitness_matrix_creates_csv(tmp_path):
+    scorer = FitnessScorer()
+    matrix = scorer.build_matrix(MOCK_COVERAGE, MOCK_OA, MOCK_CONVERGENCE)
+    exp    = DatasetExporter(output_dir=str(tmp_path))
+    path   = exp.export_fitness_matrix(matrix, run_id="test")
+    assert path.exists()
+    df = pd.read_csv(path)
+    assert "source" in df.columns
+    assert "composite" in df.columns
+    assert len(df) == 2
+
+def test_export_fitness_report_creates_markdown(tmp_path):
+    scorer = FitnessScorer()
+    matrix = scorer.build_matrix(MOCK_COVERAGE, MOCK_OA, MOCK_CONVERGENCE)
+    exp    = DatasetExporter(output_dir=str(tmp_path))
+    path   = exp.export_fitness_report(matrix, run_id="test")
+    assert path.exists()
+    content = path.read_text()
+    assert "Source Fitness" in content
+    assert "openalex" in content
+    assert "Barcelona" in content
+
+def test_export_fitness_matrix_sqlite(tmp_path):
+    import sqlite3
+    scorer = FitnessScorer()
+    matrix = scorer.build_matrix(MOCK_COVERAGE, MOCK_OA, MOCK_CONVERGENCE)
+    exp    = DatasetExporter(output_dir=str(tmp_path))
+    exp.export_fitness_matrix(matrix, run_id="test")
+    db_path = tmp_path / "fitness_test.db"
+    assert db_path.exists()
+    with sqlite3.connect(db_path) as conn:
+        rows = conn.execute("SELECT * FROM fitness_matrix").fetchall()
+    assert len(rows) == 2
