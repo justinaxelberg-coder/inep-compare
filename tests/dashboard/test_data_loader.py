@@ -4,15 +4,13 @@ import pandas as pd
 import pytest
 from pathlib import Path
 
-import sys
-sys.path.insert(0, ".")
-
 from dashboard.data_loader import (
     load_fitness_profiles,
     load_convergence,
     load_registry,
     FITNESS_COLUMNS,
     CONVERGENCE_COLUMNS,
+    DIVERGENCE_COLUMNS,
     REGISTRY_COLUMNS,
 )
 

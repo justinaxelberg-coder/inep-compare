@@ -16,6 +16,10 @@ CONVERGENCE_COLUMNS: list[str] = [
     "source_a", "source_b", "e_mec_code", "n_a", "n_b",
     "n_matched", "overlap_pct_a", "overlap_pct_b", "overlap_pct_min",
 ]
+DIVERGENCE_COLUMNS: list[str] = [
+    "e_mec_code", "institution_name", "source_a", "source_b",
+    "count_a", "count_b", "discrepancy_pct", "direction",
+]
 REGISTRY_COLUMNS: list[str] = [
     "e_mec_code", "name", "abbreviation", "city", "state",
     "faculty_with_phd", "faculty_total", "org_type", "category",
@@ -48,6 +52,8 @@ def load_fitness_profiles(
                 table = "fitness_profiles" if "fitness_profiles" in tables else (
                     "fitness_matrix" if "fitness_matrix" in tables else None
                 )
+                if table is None:
+                    logger.warning(f"fitness.db found but contains no recognised table — falling back to CSV")
                 if table:
                     df = pd.read_sql_query(f"SELECT * FROM {table}", conn)
                     logger.info(f"Loaded {len(df)} fitness rows from {db_path}:{table}")
@@ -83,7 +89,7 @@ def load_convergence(
     div_files     = sorted(Path(csv_dir).glob("divergences_phase2_*.csv"))
 
     overlap = _read_csvs(overlap_files, CONVERGENCE_COLUMNS, "overlap")
-    divs    = _read_csvs(div_files,    [], "divergences")
+    divs    = _read_csvs(div_files,    DIVERGENCE_COLUMNS, "divergences")
 
     return overlap, divs
 
@@ -113,6 +119,7 @@ def load_registry(
 
 def _ensure_columns(df: pd.DataFrame, columns: list[str]) -> pd.DataFrame:
     """Add missing columns as NaN; return df with at least those columns."""
+    df = df.copy()
     for col in columns:
         if col not in df.columns:
             df[col] = float("nan")
