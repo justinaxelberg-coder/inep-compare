@@ -69,7 +69,7 @@ def test_normalize_oa_diamond(connector):
 def test_normalize_sdgs(connector):
     result = connector.normalize(MOCK_PUB)
     assert len(result["sdgs"]) == 1
-    assert result["sdgs"][0]["display_name"] == "Good Health and Well-Being"
+    assert result["sdgs"][0] == 3  # parsed to int from sdg/3
 
 
 def test_normalize_fwci(connector):

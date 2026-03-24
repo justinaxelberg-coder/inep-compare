@@ -199,10 +199,11 @@ class OpenAlexConnector(BaseConnector):
         # Keywords (author-assigned)
         keywords = [k.get("display_name", "") for k in (raw.get("keywords") or [])]
 
-        # SDG alignment
+        # SDG alignment — parse to list[int], filter by confidence score
         sdgs = [
-            {"id": s.get("id"), "display_name": s.get("display_name"), "score": s.get("score")}
-            for s in (raw.get("sustainable_development_goals") or [])
+            int(sdg.get("id", "").split("/")[-1].replace("sdg-", ""))
+            for sdg in raw.get("sustainable_development_goals") or []
+            if sdg.get("score", 0) >= 0.4
         ]
 
         # Funders — includes ROR, enables BR funder filtering (FAPESP, CNPq, CAPES)
@@ -241,7 +242,7 @@ class OpenAlexConnector(BaseConnector):
             "citation_count": raw.get("cited_by_count"),
             "fwci": raw.get("fwci"),    # field-weighted citation impact
             "funding": funding,
-            "sdgs": sdgs,               # SDG alignment — key for social impact scoring
+            "sdgs": sdgs,               # SDG alignment — list[int], score >= 0.4
             "patent_citations": [],     # enriched by The Lens connector
             "affiliation_types": [
                 list({

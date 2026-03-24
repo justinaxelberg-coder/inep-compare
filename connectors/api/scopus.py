@@ -257,7 +257,7 @@ class ScopusConnector(BaseConnector):
             "citation_count": int(raw.get("citedby-count", 0) or 0),
             "fwci": None,           # not available in Scopus search API
             "funding": funding,
-            "sdgs": [],
+            "sdgs": [],  # Scopus does not expose SDG via standard API; flagged in source_metadata.json
             "patent_citations": [],
             "source_url": raw.get("prism:url", ""),
             "retrieved_at": datetime.now(timezone.utc).isoformat(),

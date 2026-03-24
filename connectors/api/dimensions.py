@@ -247,11 +247,22 @@ class DimensionsConnector(BaseConnector):
             for f in funders_raw
         ]
 
-        # SDGs
-        sdgs = [
-            {"id": s.get("id"), "display_name": s.get("name"), "score": None}
-            for s in (raw.get("category_sdg") or [])
-        ]
+        # SDGs — category_sdg may be:
+        #   dict form:  {"name": ["3 Good Health", ...]}   (DSL v2 API)
+        #   list form:  [{"id": "sdg/3", "name": "..."}]   (some API versions)
+        _sdg_raw = raw.get("category_sdg") or []
+        if isinstance(_sdg_raw, dict):
+            sdgs = [
+                int(s.strip().split(" ")[0])
+                for s in _sdg_raw.get("name", [])
+                if s.strip() and s.strip().split(" ")[0].isdigit()
+            ]
+        else:
+            sdgs = [
+                int(item.get("id", "").split("/")[-1])
+                for item in _sdg_raw
+                if str(item.get("id", "").split("/")[-1]).isdigit()
+            ]
 
         return {
             "source": self.source_id,
