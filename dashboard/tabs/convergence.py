@@ -89,10 +89,13 @@ def _institution_options(df: pd.DataFrame) -> list[dict]:
 
 
 def _bar_figure(df: pd.DataFrame) -> go.Figure:
+    required = {"source_a", "source_b", "overlap_pct_min"}
+    if df.empty or not required.issubset(df.columns):
+        return _empty_bar()
     df = df.copy()
     df["pair"] = df["source_a"] + " / " + df["source_b"]
     pct = df["overlap_pct_min"].fillna(0).tolist()
-    colours = ["#d62728" if v < 0.20 else ("#ffff00" if v < 0.50 else "#2ca02c") for v in pct]
+    colours = ["#d62728" if v < 0.20 else ("#ff7f0e" if v < 0.50 else "#2ca02c") for v in pct]
     fig = go.Figure(go.Bar(
         x=df["pair"].tolist(), y=pct, marker_color=colours,
         hovertemplate="%{x}<br>Overlap: %{y:.1%}<extra></extra>",
@@ -136,7 +139,9 @@ def _badges(overlap_df: pd.DataFrame, divs_df: pd.DataFrame) -> list:
 def _summary_stats(overlap_df: pd.DataFrame, divs_df: pd.DataFrame) -> html.Div:
     if overlap_df.empty or "overlap_pct_min" not in overlap_df.columns:
         return html.P("No overlap data for this institution.", className="text-muted")
-    mean_overlap = overlap_df["overlap_pct_min"].mean()
+    mean_overlap = overlap_df["overlap_pct_min"].dropna().mean()
+    if mean_overlap != mean_overlap:  # NaN check
+        mean_overlap = 0.0
     n_divergent  = len(divs_df) if not divs_df.empty else 0
     return html.Div([
         html.Span(f"Mean overlap: {mean_overlap:.1%}",
