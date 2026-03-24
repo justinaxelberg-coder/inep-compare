@@ -1,8 +1,14 @@
 # tests/connectors/test_crossref.py
 from __future__ import annotations
+import os
 import pytest
 from unittest.mock import patch, MagicMock
 from connectors.api.crossref import CrossrefConnector
+
+
+@pytest.fixture(autouse=True)
+def _set_crossref_mailto(monkeypatch):
+    monkeypatch.setenv("CROSSREF_MAILTO", "test@example.com")
 
 _SAMPLE_WORK = {
     "DOI": "10.1234/test",
@@ -15,9 +21,16 @@ _SAMPLE_WORK = {
     ],
 }
 
-def test_init_no_key():
+def test_init_uses_env():
     conn = CrossrefConnector()
+    assert conn.email == "test@example.com"
     assert conn.source_id == "crossref"
+
+
+def test_init_raises_without_env(monkeypatch):
+    monkeypatch.delenv("CROSSREF_MAILTO", raising=False)
+    with pytest.raises(ValueError, match="CROSSREF_MAILTO"):
+        CrossrefConnector()
 
 def test_has_funder_true():
     conn = CrossrefConnector()

@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import logging
+import os
 import time
 from typing import Any
 
@@ -10,10 +11,14 @@ import httpx
 logger = logging.getLogger(__name__)
 
 _BASE = "https://api.crossref.org/works"
-_MAILTO = "justin.axelberg@usp.br"  # polite pool
 
 _BR_FUNDERS = {
-    "cnpq", "capes", "fapesp", "fapemig", "faperj", "finep",
+    # Federal agencies
+    "cnpq", "capes", "finep", "bndes", "embrapii", "mec",
+    # State FAP agencies
+    "fapesp", "fapemig", "faperj", "fapesc", "fapesb", "fapespa",
+    "fapergs", "fapeal", "fapern", "fapero", "fapdf",
+    # Substring matches for full names
     "fundação de amparo", "conselho nacional", "coordenação de aperfeiçoamento",
 }
 
@@ -27,7 +32,14 @@ class CrossrefConnector:
 
     source_id = "crossref"
 
-    def __init__(self, email: str = _MAILTO, rate_limit_seconds: float = 1.0) -> None:
+    def __init__(self, email: str | None = None, rate_limit_seconds: float = 1.0) -> None:
+        if email is None:
+            email = os.getenv("CROSSREF_MAILTO")
+            if not email:
+                raise ValueError(
+                    "CROSSREF_MAILTO environment variable is required for Crossref polite pool. "
+                    "Set it to your contact email address."
+                )
         self.email = email
         self.rate_limit = rate_limit_seconds
 
