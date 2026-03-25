@@ -1,5 +1,6 @@
 # tests/enrichment/test_coauthorship.py
 from __future__ import annotations
+import pandas as pd
 import pytest
 from enrichment.coauthorship import (
     is_nonacademic, compute_coauth_metrics, NON_ACADEMIC_TYPES,
@@ -47,3 +48,17 @@ def test_composite_score_range():
     ])
     score = 0.4 * m["detectability"] + 0.3 * m["volume_rate"] + 0.3 * m["quality_score"]
     assert 0.0 <= score <= 1.0
+
+
+def test_compute_coauth_stratified_schema():
+    from enrichment.coauthorship import compute_coauth_stratified
+    papers = pd.DataFrame([
+        {"source": "openalex", "e_mec_code": "4925",
+         "affiliation_types": [["company", "education"]], "ror_resolved": True},
+        {"source": "openalex", "e_mec_code": "4925",
+         "affiliation_types": [["education"]], "ror_resolved": True},
+    ])
+    xw = pd.DataFrame([{"e_mec_code": "4925", "inst_type": "federal_university", "region": "Sudeste"}])
+    rows = compute_coauth_stratified(papers, xw)
+    assert all("sub_dimension" in r for r in rows)
+    assert any(r["sub_dimension"] == "nonacademic_coauth" for r in rows)

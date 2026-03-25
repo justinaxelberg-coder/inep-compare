@@ -44,3 +44,30 @@ def compute_coauth_metrics(papers: list[dict]) -> dict[str, float]:
         "quality_score": quality_score,
         "nonacademic_coauth_score": composite,
     }
+
+
+def compute_coauth_stratified(
+    papers_df,
+    crosswalk_df,
+) -> list[dict]:
+    """Stratified non-academic coauthorship rows (source × inst_type × region)."""
+    import pandas as pd
+    from enrichment.stratified import make_stratum_row
+    if papers_df.empty:
+        return []
+    df = papers_df.copy()
+    df["e_mec_code"] = df["e_mec_code"].astype(str)
+    xw = crosswalk_df[["e_mec_code", "inst_type", "region"]].copy()
+    xw["e_mec_code"] = xw["e_mec_code"].astype(str)
+    merged = df.merge(xw, on="e_mec_code", how="inner")
+    rows = []
+    for (source, inst_type, region), grp in merged.groupby(["source", "inst_type", "region"]):
+        papers_list = grp.to_dict("records")
+        metrics = compute_coauth_metrics(papers_list)
+        rows.append(make_stratum_row(
+            source=str(source), inst_type=str(inst_type), region=str(region),
+            sub_dimension="nonacademic_coauth",
+            value=metrics["nonacademic_coauth_score"],
+            n_papers=len(papers_list),
+        ))
+    return rows

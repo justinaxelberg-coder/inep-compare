@@ -1,6 +1,7 @@
 # tests/enrichment/test_sdg.py
 from __future__ import annotations
 import json
+import pandas as pd
 import pytest
 from enrichment.sdg import (
     compute_sdg_rates, compute_sdg_agreement, write_sdg_flag, SDG_LABELS,
@@ -53,3 +54,15 @@ def test_write_sdg_flag_merges(tmp_path):
     data = json.loads(path.read_text())
     assert data["openalex"]["sdg_available"] is True
     assert data["scopus"]["sdg_available"] is False
+
+
+def test_compute_sdg_stratified_schema():
+    from enrichment.sdg import compute_sdg_stratified
+    papers = pd.DataFrame([
+        {"source": "openalex", "e_mec_code": "4925", "sdgs": [3, 4]},
+        {"source": "openalex", "e_mec_code": "4925", "sdgs": [4]},
+    ])
+    xw = pd.DataFrame([{"e_mec_code": "4925", "inst_type": "federal_university", "region": "Sudeste"}])
+    rows = compute_sdg_stratified(papers, xw)
+    assert all("sub_dimension" in r for r in rows)
+    assert all(r["sub_dimension"].startswith("sdg_") for r in rows)

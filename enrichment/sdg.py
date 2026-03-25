@@ -58,6 +58,35 @@ def compute_sdg_agreement(
     }
 
 
+def compute_sdg_stratified(
+    papers_df,
+    crosswalk_df,
+) -> list[dict]:
+    """Stratified SDG rows — one row per (source × inst_type × region × sdg_goal)."""
+    import pandas as pd
+    from enrichment.stratified import make_stratum_row
+    if papers_df.empty:
+        return []
+    df = papers_df.copy()
+    df["e_mec_code"] = df["e_mec_code"].astype(str)
+    xw = crosswalk_df[["e_mec_code", "inst_type", "region"]].copy()
+    xw["e_mec_code"] = xw["e_mec_code"].astype(str)
+    merged = df.merge(xw, on="e_mec_code", how="inner")
+    rows = []
+    for (source, inst_type, region), grp in merged.groupby(["source", "inst_type", "region"]):
+        papers_list = grp.to_dict("records")
+        rates = compute_sdg_rates(papers_list)
+        n = len(papers_list)
+        for goal, data in rates.items():
+            rows.append(make_stratum_row(
+                source=str(source), inst_type=str(inst_type), region=str(region),
+                sub_dimension=f"sdg_{goal:02d}",
+                value=data["rate"],
+                n_papers=n,
+            ))
+    return rows
+
+
 def write_sdg_flag(path: Path, source: str, available: bool) -> None:
     """Atomically update source_metadata.json with SDG availability flag."""
     path = Path(path)
