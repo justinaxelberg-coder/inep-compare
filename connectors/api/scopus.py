@@ -133,10 +133,11 @@ class ScopusConnector(BaseConnector):
         """Paginate through Scopus search results."""
         records: list[dict] = []
         start = 0
-        count = min(25, self.max_records)   # Scopus max per page is 25
+        _cap = self.max_records  # None means uncapped
+        count = min(25, _cap) if _cap is not None else 25  # Scopus max per page is 25
 
         with httpx.Client(timeout=30, headers=self._headers) as client:
-            while len(records) < self.max_records:
+            while _cap is None or len(records) < _cap:
                 params = {
                     "query": query,
                     "count": count,
@@ -162,9 +163,9 @@ class ScopusConnector(BaseConnector):
                 records.extend(entries)
                 total = int(results.get("opensearch:totalResults", 0))
 
-                if len(records) >= self.max_records:
+                if _cap is not None and len(records) >= _cap:
                     logger.warning(
-                        f"[scopus] Ceiling hit ({self.max_records}). "
+                        f"[scopus] Ceiling hit ({_cap}). "
                         f"Actual corpus: {total:,}"
                     )
                     self.last_total_count = total
