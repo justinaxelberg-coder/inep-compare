@@ -24,6 +24,7 @@ _KEY_MAP = {
     "dimensions_api_key":  "DIMENSIONS_API_KEY",
     "dimensions_username": "DIMENSIONS_USERNAME",
     "dimensions_password": "DIMENSIONS_PASSWORD",
+    "crossref_mailto":     "CROSSREF_MAILTO",
 }
 
 
