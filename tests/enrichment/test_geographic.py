@@ -50,3 +50,25 @@ def test_missing_registry_returns_none():
     result = load_and_compute(registry_path="/nonexistent/path.csv",
                                pub_counts={}, source="openalex")
     assert result is None
+
+
+def test_geographic_rows_include_inst_type():
+    from enrichment.geographic import compute_coverage_gap_stratified
+    registry = pd.DataFrame([
+        {"e_mec_code": "1", "region": "Norte",   "inst_type": "federal_university", "faculty_with_phd": 100},
+        {"e_mec_code": "2", "region": "Sudeste", "inst_type": "isolated_faculty",   "faculty_with_phd": 20},
+    ])
+    indexed = {"1"}
+    rows = compute_coverage_gap_stratified(registry, indexed, "openalex")
+    assert all("inst_type" in r for r in rows)
+    assert all("sub_dimension" in r for r in rows)
+
+
+def test_geographic_sub_dimension_values():
+    from enrichment.geographic import compute_coverage_gap_stratified
+    registry = pd.DataFrame([
+        {"e_mec_code": "1", "region": "Norte", "inst_type": "federal_university", "faculty_with_phd": 100},
+    ])
+    rows = compute_coverage_gap_stratified(registry, {"1"}, "openalex")
+    sub_dims = {r["sub_dimension"] for r in rows}
+    assert "geographic_coverage_gap" in sub_dims

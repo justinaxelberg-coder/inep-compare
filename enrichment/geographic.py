@@ -42,6 +42,48 @@ def compute_geographic_bias_score(coverage_gaps: dict[str, float]) -> float:
     return max(0.0, min(1.0, raw))
 
 
+def compute_coverage_gap_stratified(
+    registry: pd.DataFrame,
+    indexed: set[str],
+    source: str,
+) -> list[dict]:
+    """Return stratified rows for (source × inst_type × region) coverage gap.
+
+    Args:
+        registry: DataFrame with columns e_mec_code, region, inst_type, faculty_with_phd
+        indexed: set of e_mec_code strings that appear in the source's coverage
+        source: source identifier string (e.g. "openalex", "scopus")
+
+    Returns list of dicts matching stratified schema (source, inst_type, region,
+    sub_dimension, value, n_papers, confidence_tier).
+
+    Value: 1.0 = perfectly proportional, 0.0 = maximally biased.
+    Negative gap = under-indexed for this stratum.
+    """
+    from enrichment.stratified import make_stratum_row
+    rows = []
+    total = len(registry)
+    total_indexed = len(indexed)
+    if total == 0 or total_indexed == 0:
+        return rows
+
+    for (inst_type, region), grp in registry.groupby(["inst_type", "region"]):
+        expected = len(grp) / total
+        grp_codes = set(grp["e_mec_code"].astype(str))
+        observed = len(grp_codes & indexed) / total_indexed
+        gap = observed - expected  # negative = under-indexed
+        bias_score = max(0.0, min(1.0, 1.0 - abs(gap) * 2))
+        rows.append(make_stratum_row(
+            source=source,
+            inst_type=str(inst_type),
+            region=str(region),
+            sub_dimension="geographic_coverage_gap",
+            value=bias_score,
+            n_papers=len(grp),
+        ))
+    return rows
+
+
 def load_and_compute(registry_path: str, pub_counts: dict[str, int],
                      source: str) -> dict | None:
     """Load registry and return bias metrics. Returns None if registry absent."""
