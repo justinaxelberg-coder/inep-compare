@@ -16,6 +16,14 @@ from enrichment.coauthorship import compute_coauth_metrics
 from enrichment.diamond_oa import enrich_oa_file
 from enrichment.geographic import load_and_compute as geo_compute
 from enrichment.sdg import SDG_LABELS, compute_sdg_rates, write_sdg_flag
+from enrichment.sensitivity import compute_sensitivity, aggregate_by_stratum, build_sensitivity_rows
+from enrichment.disambiguation import compute_disambiguation_rate, build_disambiguation_rows
+from enrichment.funder import compute_funder_rates, build_funder_rows
+from enrichment.policy_docs import compute_policy_rates, build_policy_rows
+from enrichment.coauthorship import compute_coauth_stratified
+from enrichment.sdg import compute_sdg_stratified
+from enrichment.patents import compute_patent_link_rate, build_patent_rows
+from enrichment.stratified import write_stratified_csv
 
 logging.basicConfig(level=logging.INFO,
                     format="%(asctime)s [%(levelname)s] %(name)s — %(message)s")
@@ -24,6 +32,37 @@ logger = logging.getLogger(__name__)
 _PROCESSED = Path("data/processed")
 _REGISTRY  = Path("registry/institutions.csv")
 _METADATA  = _PROCESSED / "source_metadata.json"
+
+
+def _load_crosswalk() -> pd.DataFrame:
+    path = Path("registry/crosswalk_enriched.csv")
+    if not path.exists():
+        logger.warning("crosswalk_enriched.csv not found — stratified enrichment will be empty")
+        return pd.DataFrame(columns=["e_mec_code", "inst_type", "region"])
+    df = pd.read_csv(path)
+    df["e_mec_code"] = df["e_mec_code"].astype(str)
+    if "sinaes_type" in df.columns and "inst_type" not in df.columns:
+        df = df.rename(columns={"sinaes_type": "inst_type"})
+    return df[["e_mec_code", "inst_type", "region"]].dropna()
+
+
+def _to_papers_df(papers: list[dict]) -> pd.DataFrame:
+    if not papers:
+        return pd.DataFrame()
+    df = pd.DataFrame(papers)
+    for col, default in [
+        ("ror_resolved", False),
+        ("funding", None),
+        ("patent_citations", None),
+        ("document_type", None),
+        ("sdgs", None),
+        ("affiliation_types", None),
+        ("e_mec_code", ""),
+        ("source", ""),
+    ]:
+        if col not in df.columns:
+            df[col] = default
+    return df
 
 
 def _resolve_date(date_str: str | None, processed: Path) -> str:
@@ -72,7 +111,7 @@ def _fetch_papers_for_enrichment(source: str, e_mec_codes: list[str],
                     start_year=start_year,
                     end_year=end_year,
                 )
-                papers.extend(conn.normalize(r) for r in records)
+                papers.extend(records)  # query_institution already returns normalised records
             except Exception as exc:
                 logger.warning("OpenAlex fetch failed for %s: %s", ror, exc)
 
@@ -103,7 +142,7 @@ def _fetch_papers_for_enrichment(source: str, e_mec_codes: list[str],
                     start_year=start_year,
                     end_year=end_year,
                 )
-                papers.extend(conn.normalize(r) for r in records)
+                papers.extend(records)  # query_institution already returns normalised records
             except Exception as exc:
                 logger.warning("Dimensions fetch failed for %s: %s", ror, exc)
 
@@ -198,6 +237,50 @@ def main() -> None:
                 out = _PROCESSED / f"sdg_by_source_type_{date}.csv"
                 pd.DataFrame(sdg_rows).to_csv(out, index=False)
                 logger.info("Wrote %s", out)
+
+    # 5. Stratified enrichment (requires crosswalk + fetched papers)
+    xw = _load_crosswalk()
+    if xw.empty:
+        logger.warning("Crosswalk empty — skipping stratified enrichment")
+    else:
+        # Sensitivity (no API — uses coverage CSVs already on disk)
+        try:
+            if coverage_csv:
+                cov_df = pd.read_csv(coverage_csv)
+                sens_df = compute_sensitivity(cov_df, xw)
+                agg = aggregate_by_stratum(sens_df)
+                rows = build_sensitivity_rows(agg)
+                if rows:
+                    write_stratified_csv(rows, _PROCESSED / f"sensitivity_{date}.csv")
+        except Exception as exc:
+            logger.warning("Sensitivity enrichment failed: %s", exc)
+
+        # Stratified modules that need fetched papers (OpenAlex)
+        if not args.skip_coauth:
+            e_mec_codes = list(xw["e_mec_code"].astype(str).unique())
+            papers = _fetch_papers_for_enrichment("openalex", e_mec_codes, config)
+            papers_df = _to_papers_df(papers)
+            if not papers_df.empty:
+                for fn, out_name in [
+                    (lambda df: build_disambiguation_rows(compute_disambiguation_rate(df, xw)),
+                     f"disambiguation_{date}.csv"),
+                    (lambda df: build_funder_rows(compute_funder_rates(df, xw)),
+                     f"funder_{date}.csv"),
+                    (lambda df: build_policy_rows(compute_policy_rates(df, xw)),
+                     f"policy_docs_{date}.csv"),
+                    (lambda df: compute_coauth_stratified(df, xw),
+                     f"nonacademic_coauth_{date}.csv"),
+                    (lambda df: compute_sdg_stratified(df, xw),
+                     f"sdg_stratified_{date}.csv"),
+                    (lambda df: build_patent_rows(compute_patent_link_rate(df, xw)),
+                     f"patents_{date}.csv"),
+                ]:
+                    try:
+                        rows = fn(papers_df)
+                        if rows:
+                            write_stratified_csv(rows, _PROCESSED / out_name)
+                    except Exception as exc:
+                        logger.warning("Stratified enrichment failed for %s: %s", out_name, exc)
 
     logger.info("Enrichment complete.")
 
