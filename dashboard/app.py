@@ -46,10 +46,9 @@ logger.info("Loading institution registry...")
 _registry_df = load_registry(csv_dir=_REGISTRY)
 
 logger.info("Loading enrichment data...")
-from dashboard.data_loader import load_geographic, load_sdg, load_source_metadata
-_geo_df      = load_geographic(csv_dir=_PROCESSED)
-_sdg_df      = load_sdg(csv_dir=_PROCESSED)
-_metadata    = load_source_metadata(processed_dir=_PROCESSED)
+from dashboard.data_loader import load_enrichment_combined, load_source_metadata
+_enrichment_df = load_enrichment_combined(csv_dir=_PROCESSED)
+_metadata      = load_source_metadata(processed_dir=_PROCESSED)
 
 logger.info(
     "Data ready: %d fitness rows, %d overlap rows, %d institutions",
@@ -106,7 +105,7 @@ def render_tab(tab: str):
     if tab == "tab-registry":
         return registry_tab.layout(_registry_df)
     if tab == "tab-enrichment":
-        return enrichment_tab.layout(_geo_df, _sdg_df, _metadata)
+        return enrichment_tab.layout(_enrichment_df, _metadata)
     return html.P("Unknown tab.", className="text-muted")
 
 

@@ -8,6 +8,11 @@ import pandas as pd
 
 logger = logging.getLogger(__name__)
 
+STRATIFIED_SCHEMA: list[str] = [
+    "source", "inst_type", "region", "sub_dimension",
+    "value", "n_papers", "confidence_tier",
+]
+
 FITNESS_COLUMNS: list[str] = [
     "source", "inst_type", "coverage", "data_quality", "reliability",
     "accessibility", "social_impact", "governance", "innovation_link", "composite",
@@ -177,6 +182,70 @@ def load_sdg(csv_dir: Path | None = None) -> pd.DataFrame:
     except Exception as exc:
         logger.warning("SDG load failed: %s", exc)
         return pd.DataFrame(columns=["source","inst_type","sdg_goal","sdg_label","rate","n_tagged","n_total"])
+
+
+def load_sensitivity(csv_dir: Path | None = None) -> pd.DataFrame:
+    """Load most recent sensitivity_*.csv. Returns empty DataFrame if absent."""
+    csv_dir = Path(csv_dir) if csv_dir else _DEFAULT_PROCESSED
+    files = sorted(Path(csv_dir).glob("sensitivity_*.csv"))
+    if not files:
+        logger.warning("No sensitivity_*.csv found in %s", csv_dir)
+        return pd.DataFrame(columns=STRATIFIED_SCHEMA)
+    return pd.read_csv(files[-1])
+
+
+def load_metadata_quality(csv_dir: Path | None = None) -> pd.DataFrame:
+    """Concatenate disambiguation, funder, and policy_docs stratified CSVs."""
+    csv_dir = Path(csv_dir) if csv_dir else _DEFAULT_PROCESSED
+    frames = []
+    for pat in ["disambiguation_*.csv", "funder_*.csv", "policy_docs_*.csv"]:
+        files = sorted(Path(csv_dir).glob(pat))
+        if files:
+            frames.append(pd.read_csv(files[-1]))
+    if not frames:
+        logger.warning("No metadata quality CSVs found in %s", csv_dir)
+        return pd.DataFrame(columns=STRATIFIED_SCHEMA)
+    return pd.concat(frames, ignore_index=True)
+
+
+def load_sdg_stratified(csv_dir: Path | None = None) -> pd.DataFrame:
+    """Load most recent sdg_stratified_*.csv. Falls back to sdg_by_source_type_*.csv."""
+    csv_dir = Path(csv_dir) if csv_dir else _DEFAULT_PROCESSED
+    files = sorted(Path(csv_dir).glob("sdg_stratified_*.csv"))
+    if files:
+        return pd.read_csv(files[-1])
+    legacy = sorted(Path(csv_dir).glob("sdg_by_source_type_*.csv"))
+    if legacy:
+        logger.info("Using legacy SDG file — re-run enrichment to get stratified version")
+        return pd.read_csv(legacy[-1])
+    return pd.DataFrame(columns=STRATIFIED_SCHEMA)
+
+
+def load_enrichment_combined(csv_dir: Path | None = None) -> pd.DataFrame:
+    """Merge geographic, sensitivity, SDG, and metadata quality into one stratified DataFrame."""
+    csv_dir = Path(csv_dir) if csv_dir else _DEFAULT_PROCESSED
+    frames = []
+    geo_files = sorted(Path(csv_dir).glob("geographic_coverage_*.csv"))
+    if geo_files:
+        g = pd.read_csv(geo_files[-1])
+        if "inst_type" not in g.columns:
+            g["inst_type"] = "all"
+        if "sub_dimension" not in g.columns:
+            if "geographic_bias_score" in g.columns:
+                g = g.rename(columns={"geographic_bias_score": "value"})
+            g["sub_dimension"] = "geographic_coverage_gap"
+            g["n_papers"] = 0
+            g["confidence_tier"] = "low"
+        if all(c in g.columns for c in STRATIFIED_SCHEMA):
+            frames.append(g[STRATIFIED_SCHEMA])
+        else:
+            frames.append(g)
+    for loader in [load_sensitivity, load_metadata_quality, load_sdg_stratified]:
+        frames.append(loader(csv_dir))
+    if not frames:
+        return pd.DataFrame(columns=STRATIFIED_SCHEMA)
+    result = pd.concat(frames, ignore_index=True)
+    return result[[c for c in STRATIFIED_SCHEMA if c in result.columns]]
 
 
 def load_source_metadata(processed_dir: Path | None = None) -> dict:
