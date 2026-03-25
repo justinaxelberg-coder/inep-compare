@@ -282,10 +282,10 @@ class DatasetExporter:
                       "| Institution | Source A | Source B | Count A | Count B | Discrepancy |",
                       "|---|---|---|---|---|---|"]
             # Track which counts hit the ceiling for flagging
-            ceiling = convergence.get("ceiling", 500)
+            ceiling = convergence.get("ceiling")
             for d in sorted(divergences, key=lambda x: -x.discrepancy_pct)[:20]:
-                a_flag = "⚠" if d.count_a >= ceiling else ""
-                b_flag = "⚠" if d.count_b >= ceiling else ""
+                a_flag = "⚠" if (ceiling is not None and d.count_a >= ceiling) else ""
+                b_flag = "⚠" if (ceiling is not None and d.count_b >= ceiling) else ""
                 lines.append(
                     f"| {d.institution_name} | {d.source_a} | {d.source_b} | "
                     f"{d.count_a}{a_flag} | {d.count_b}{b_flag} | {d.discrepancy_pct:.1%} |"
