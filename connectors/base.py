@@ -79,14 +79,14 @@ class BaseConnector(ABC):
             end_year=end_year,
         )
 
-        if len(raw_records) >= self.max_records:
+        cap = self.max_records  # None means uncapped
+        if cap is not None and len(raw_records) >= cap:
             logger.warning(
                 f"[{self.source_id}] {e_mec_code}: max_records ceiling hit "
-                f"({self.max_records}). Results are truncated. "
+                f"({cap}). Results are truncated. "
                 f"This is a data point — consider raising ceiling or narrowing query."
             )
 
-        cap = None if self.max_records == float("inf") else self.max_records
         normalised = [self.normalize(r) for r in raw_records[:cap]]
         self._save_cache(cache_key, normalised)
         return normalised
