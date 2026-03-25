@@ -169,6 +169,53 @@ def _load_convergence(pattern: str) -> dict:
     return result
 
 
+_SUB_DIM_TO_FIELD = {
+    "sensitivity":           "sensitivity",
+    "disambiguation_quality":"disambiguation_quality",
+    "funder_metadata_rate":  "funder_rate",
+    "policy_document_rate":  "policy_rate",
+    "patent_link_rate":      "patent_rate",
+    "nonacademic_coauth":    "nonacademic_coauth",
+    "geographic_coverage_gap":"geographic_bias",
+}
+
+
+def _load_enrichment_stratified(csv_dir: Path) -> dict[tuple[str, str], dict]:
+    """Return {(source, inst_type): {field: mean_value_across_regions}} from stratified CSVs.
+
+    Averages across regions and confidence tiers (insufficient rows included — scorer
+    can decide to weight by n_papers in future). SDG rate is the mean across all sdg_* rows.
+    """
+    patterns = [
+        "sensitivity_*.csv", "disambiguation_*.csv", "funder_*.csv",
+        "policy_docs_*.csv", "patents_*.csv", "nonacademic_coauth_*.csv",
+        "sdg_stratified_*.csv",
+    ]
+    frames = []
+    for pat in patterns:
+        files = sorted(csv_dir.glob(pat))
+        if files:
+            frames.append(pd.read_csv(files[-1]))
+    if not frames:
+        return {}
+
+    df = pd.concat(frames, ignore_index=True)
+    result: dict[tuple[str, str], dict] = {}
+    for (source, inst_type), grp in df.groupby(["source", "inst_type"]):
+        entry: dict = {}
+        for sub_dim, field in _SUB_DIM_TO_FIELD.items():
+            sub = grp[grp["sub_dimension"] == sub_dim]
+            if not sub.empty:
+                entry[field] = float(sub["value"].mean())
+        # SDG: mean across all sdg_NN sub-dimensions
+        sdg_rows = grp[grp["sub_dimension"].str.startswith("sdg_", na=False)]
+        if not sdg_rows.empty:
+            entry["sdg_rate"] = float(sdg_rows["value"].mean())
+        result[(str(source), str(inst_type))] = entry
+    logger.info("Loaded enrichment for %d (source, inst_type) strata", len(result))
+    return result
+
+
 def main() -> None:
     run_id   = str(date.today())
     exporter = DatasetExporter(output_dir="data/processed")
@@ -191,8 +238,12 @@ def main() -> None:
     logger.info("Loading dedup scores...")
     dedup_scores = _load_dedup_scores(PROCESSED)
 
+    logger.info("Loading stratified enrichment...")
+    enrichment = _load_enrichment_stratified(PROCESSED)
+
     logger.info(f"Building fitness matrix: {len(coverage)} sources")
-    matrix = scorer.build_matrix(coverage, oa, convergence, dedup_scores=dedup_scores)
+    matrix = scorer.build_matrix(
+        coverage, oa, convergence, dedup_scores=dedup_scores, enrichment=enrichment)
     logger.info(f"  {len(matrix.rows)} source × institution-type profiles")
 
     csv_path    = exporter.export_fitness_matrix(matrix, run_id)

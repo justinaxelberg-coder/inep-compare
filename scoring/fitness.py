@@ -126,16 +126,27 @@ class FitnessScorer:
         diamond_oa_rate: float = 0.0,
         geographic_bias: float | None = None,
         nonacademic_coauth: float = 0.0,
+        sensitivity: float = 0.0,
+        disambiguation_quality: float = 0.0,
+        funder_rate: float = 0.0,
+        policy_rate: float = 0.0,
+        patent_rate: float = 0.0,
     ) -> FitnessProfile:
         static = self.static.get(source_id, {})
 
-        coverage_score = self._score_coverage(coverage, geographic_bias=geographic_bias)
-        dq_score       = self._score_data_quality(coverage, convergence, source_id, dedup_score=dedup_score)
+        coverage_score = self._score_coverage(
+            coverage, geographic_bias=geographic_bias, sensitivity=sensitivity)
+        dq_score       = self._score_data_quality(
+            coverage, convergence, source_id, dedup_score=dedup_score,
+            disambiguation_quality=disambiguation_quality, funder_rate=funder_rate)
         rel_score      = self._score_reliability(convergence, source_id, static)
         acc_score      = self._score_accessibility(static)
-        si_score       = self._score_social_impact(oa, static, sdg_rate=sdg_rate, diamond_oa_rate=diamond_oa_rate)
+        si_score       = self._score_social_impact(
+            oa, static, sdg_rate=sdg_rate, diamond_oa_rate=diamond_oa_rate,
+            policy_rate=policy_rate)
         gov_score      = self._score_governance(static)
-        inn_score      = self._score_innovation_link(patents, nonacademic_coauth=nonacademic_coauth)
+        inn_score      = self._score_innovation_link(
+            patents, nonacademic_coauth=nonacademic_coauth, patent_rate=patent_rate)
         cov_score      = coverage_score
 
         weights   = self.dim_w
@@ -166,54 +177,84 @@ class FitnessScorer:
         convergence: dict,
         patent_by_source_type: dict | None = None,
         dedup_scores: dict[str, float] | None = None,
+        enrichment: dict[tuple[str, str], dict] | None = None,
     ) -> FitnessMatrix:
+        """Build fitness matrix.
+
+        enrichment: optional {(source_id, inst_type): {sensitivity, disambiguation_quality,
+            funder_rate, policy_rate, patent_rate, sdg_rate, nonacademic_coauth,
+            geographic_bias, diamond_oa_rate}} loaded from stratified CSVs.
+        """
         rows: list[FitnessProfile] = []
         for source_id, type_map in coverage_by_source_type.items():
             for inst_type, cov in type_map.items():
                 oa      = (oa_by_source_type.get(source_id) or {}).get(inst_type, {})
                 patents = ((patent_by_source_type or {}).get(source_id) or {}).get(inst_type)
+                enr     = (enrichment or {}).get((source_id, inst_type), {})
                 profile = self.build_profile(
                     source_id=source_id, inst_type=inst_type,
                     coverage=cov, oa=oa, convergence=convergence, patents=patents,
                     dedup_score=(dedup_scores or {}).get(source_id, 0.0),
+                    sensitivity=enr.get("sensitivity", 0.0),
+                    disambiguation_quality=enr.get("disambiguation_quality", 0.0),
+                    funder_rate=enr.get("funder_rate", 0.0),
+                    policy_rate=enr.get("policy_rate", 0.0),
+                    patent_rate=enr.get("patent_rate", 0.0),
+                    sdg_rate=enr.get("sdg_rate", 0.0),
+                    nonacademic_coauth=enr.get("nonacademic_coauth", 0.0),
+                    geographic_bias=enr.get("geographic_bias"),
+                    diamond_oa_rate=enr.get("diamond_oa_rate", 0.0),
                 )
                 rows.append(profile)
         return FitnessMatrix(rows=rows)
 
-    def _score_coverage(self, cov: dict, geographic_bias: float | None = None) -> float:
-        # NOTE: geographic_bias and equity_representation are declared in scoring_weights.yaml
-        # but not yet computable from API data alone. Excluded from total_w intentionally.
-        # TODO: add when INEP Microdados geographic data is integrated.
+    def _score_coverage(
+        self, cov: dict, geographic_bias: float | None = None, sensitivity: float = 0.0,
+    ) -> float:
         w = self.sub_w.get("coverage", {})
         keys = ("institutional_coverage", "field_coverage", "temporal_coverage", "language_coverage")
         total_w = sum(w.get(k, 0.25) for k in keys) or 1.0
         score = sum(w.get(k, 0.25) * float(cov.get(k, 0)) for k in keys)
-        if geographic_bias is not None:  # None = registry absent, skip; 0.0 = computed as zero, include
+        if geographic_bias is not None:
             gb_w = w.get("geographic_bias", 0.0)
             score += gb_w * geographic_bias
             total_w += gb_w
+        if sensitivity > 0.0:
+            # sensitivity blends into institutional_coverage sub-weight
+            sens_w = w.get("institutional_coverage", 0.35) * 0.5
+            score += sens_w * sensitivity
+            total_w += sens_w
         return min(1.0, score / total_w)
 
-    def _score_data_quality(self, cov: dict, convergence: dict, source_id: str, dedup_score: float = 0.0) -> float:
+    def _score_data_quality(
+        self, cov: dict, convergence: dict, source_id: str,
+        dedup_score: float = 0.0, disambiguation_quality: float = 0.0,
+        funder_rate: float = 0.0,
+    ) -> float:
         doi_rate     = float(cov.get("doi_coverage_rate", 0.5))
         overlap_vals = [v.get("overlap_pct", 0) for k, v in convergence.items()
                         if source_id in k]
         avg_overlap  = sum(overlap_vals) / len(overlap_vals) if overlap_vals else 0.5
-        # timeliness = 1.0 because all queries use the same temporal window.
-        # TODO: derive from date_published distribution when longitudinal data available.
         timeliness   = 1.0
         w = self.sub_w.get("data_quality", {})
+        # disambiguation_quality: prefer empirical ROR rate when available, else inter-source overlap
+        dq_empirical = disambiguation_quality if disambiguation_quality > 0.0 else avg_overlap
         total_w = (w.get("completeness", 0.30) + w.get("disambiguation_quality", 0.30) +
                    w.get("timeliness", 0.20)) or 1.0
         score = (
             w.get("completeness", 0.30)           * doi_rate +
-            w.get("disambiguation_quality", 0.30) * avg_overlap +
+            w.get("disambiguation_quality", 0.30) * dq_empirical +
             w.get("timeliness", 0.20)             * timeliness
         )
         if dedup_score > 0.0:
             dedup_w = w.get("deduplication", 0.0)
             score += dedup_w * dedup_score
             total_w += dedup_w
+        if funder_rate > 0.0:
+            # Funder metadata completeness contributes to completeness sub-dimension
+            funder_w = w.get("completeness", 0.30) * 0.3
+            score += funder_w * funder_rate
+            total_w += funder_w
         return min(1.0, score / total_w)
 
     def _score_reliability(self, convergence: dict, source_id: str, static: dict) -> float:
@@ -243,30 +284,31 @@ class FitnessScorer:
         total_w = sum(w.get(k, 0.2) for k in keys) or 1.0
         return min(1.0, sum(w.get(k, 0.2) * float(acc.get(k, 0.5)) for k in keys) / total_w)
 
-    def _score_social_impact(self, oa: dict, static: dict, sdg_rate: float = 0.0, diamond_oa_rate: float = 0.0) -> float:
-        # NOTE: sdg_coverage (weight 0.25) is declared in YAML but excluded here —
-        # SDG tagging is available in OpenAlex/Dimensions but not yet aggregated into
-        # the social_impact input dict. TODO: add sdg_rate field to OA results.
+    def _score_social_impact(
+        self, oa: dict, static: dict, sdg_rate: float = 0.0,
+        diamond_oa_rate: float = 0.0, policy_rate: float = 0.0,
+    ) -> float:
         oa_rate   = float(oa.get("oa_rate", 0))
         si_static = static.get("social_impact", {})
-        policy    = float(si_static.get("policy_citations", 0.2))
-        engage    = float(si_static.get("public_engagement", 0.2))
-        geo       = float(si_static.get("geographic_social_context", 0.5))
+        # Use empirical policy_rate when available, else static fallback
+        policy = policy_rate if policy_rate > 0.0 else float(si_static.get("policy_citations", 0.2))
+        engage = float(si_static.get("public_engagement", 0.2))
+        geo    = float(si_static.get("geographic_social_context", 0.5))
         w = self.sub_w.get("social_impact", {})
-        total_w = (w.get("oa_percentage", 0.20) + w.get("policy_citations", 0.20) +
-                   w.get("public_engagement", 0.20) + w.get("geographic_social_context", 0.15)) or 1.0
+        total_w = (w.get("oa_percentage", 0.20) + w.get("policy_citations", 0.15) +
+                   w.get("public_engagement", 0.15) + w.get("geographic_social_context", 0.15)) or 1.0
         score = (
             w.get("oa_percentage", 0.20)             * oa_rate +
-            w.get("policy_citations", 0.20)          * policy +
-            w.get("public_engagement", 0.20)         * engage +
+            w.get("policy_citations", 0.15)          * policy +
+            w.get("public_engagement", 0.15)         * engage +
             w.get("geographic_social_context", 0.15) * geo
         )
         if sdg_rate > 0.0:
-            sdg_w = w.get("sdg_coverage", 0.0)
+            sdg_w = w.get("sdg_coverage", 0.25)
             score += sdg_w * sdg_rate
             total_w += sdg_w
         if diamond_oa_rate > 0.0:
-            dia_w = w.get("diamond_oa", 0.0)
+            dia_w = w.get("diamond_oa", 0.10)
             score += dia_w * diamond_oa_rate
             total_w += dia_w
         return min(1.0, score / total_w)
@@ -279,9 +321,11 @@ class FitnessScorer:
         total_w = sum(w.get(k, 0.25) for k in keys) or 1.0
         return min(1.0, sum(w.get(k, 0.25) * float(gov.get(k, 0.5)) for k in keys) / total_w)
 
-    def _score_innovation_link(self, patents: dict | None, nonacademic_coauth: float = 0.0) -> float:
+    def _score_innovation_link(
+        self, patents: dict | None, nonacademic_coauth: float = 0.0, patent_rate: float = 0.0,
+    ) -> float:
         w = self.sub_w.get("innovation_link", {})
-        if not patents and nonacademic_coauth <= 0.0:
+        if not patents and nonacademic_coauth <= 0.0 and patent_rate <= 0.0:
             return 0.0
         total_w = 0.0
         score   = 0.0
@@ -298,9 +342,14 @@ class FitnessScorer:
             score   += npl_w * link_score + pat_w * pat_score + intl_w * intl_score
             total_w += npl_w + pat_w + intl_w
         if nonacademic_coauth > 0.0:
-            coauth_w = w.get("nonacademic_coauth", 0.0)
+            coauth_w = w.get("nonacademic_coauth", 0.10)
             score   += coauth_w * nonacademic_coauth
             total_w += coauth_w
+        if patent_rate > 0.0:
+            # Empirical patent link rate supplements the Lens patent_count_score
+            pr_w    = w.get("npl_link_rate", 0.35)
+            score   += pr_w * patent_rate
+            total_w += pr_w
         if total_w == 0.0:
             return 0.0
         return min(1.0, score / total_w)
