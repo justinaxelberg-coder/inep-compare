@@ -40,7 +40,8 @@ def _load_crosswalk() -> pd.DataFrame:
         logger.warning("crosswalk_enriched.csv not found — stratified enrichment will be empty")
         return pd.DataFrame(columns=["e_mec_code", "inst_type", "region"])
     df = pd.read_csv(path)
-    df["e_mec_code"] = df["e_mec_code"].astype(str)
+    # Strip leading zeros to match spotlight config format (e.g. "004925" → "4925")
+    df["e_mec_code"] = df["e_mec_code"].astype(str).str.lstrip("0")
     if "sinaes_type" in df.columns and "inst_type" not in df.columns:
         df = df.rename(columns={"sinaes_type": "inst_type"})
     return df[["e_mec_code", "inst_type", "region"]].dropna()
@@ -111,7 +112,11 @@ def _fetch_papers_for_enrichment(source: str, e_mec_codes: list[str],
                     start_year=start_year,
                     end_year=end_year,
                 )
-                papers.extend(records)  # query_institution already returns normalised records
+                # Stamp singular e_mec_code for enrichment module joins
+                code = str(inst["e_mec_code"])
+                for r in records:
+                    r["e_mec_code"] = code
+                papers.extend(records)
             except Exception as exc:
                 logger.warning("OpenAlex fetch failed for %s: %s", ror, exc)
 
@@ -142,7 +147,10 @@ def _fetch_papers_for_enrichment(source: str, e_mec_codes: list[str],
                     start_year=start_year,
                     end_year=end_year,
                 )
-                papers.extend(records)  # query_institution already returns normalised records
+                code = str(inst["e_mec_code"])
+                for r in records:
+                    r["e_mec_code"] = code
+                papers.extend(records)
             except Exception as exc:
                 logger.warning("Dimensions fetch failed for %s: %s", ror, exc)
 

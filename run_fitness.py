@@ -53,6 +53,7 @@ def _load_sinaes_types() -> dict[str, str]:
         logger.info("Enriched crosswalk not found — using name heuristics for inst type")
         return {}
     cw = pd.read_csv(_CROSSWALK_ENRICHED, dtype={"e_mec_code": str})
+    cw["e_mec_code"] = cw["e_mec_code"].str.lstrip("0")
     result = {}
     for _, row in cw.iterrows():
         if pd.notna(row.get("sinaes_type")):
