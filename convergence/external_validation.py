@@ -19,7 +19,29 @@ def _normalise_year(value: object) -> int | None:
 def _normalise_title(value: object) -> str | None:
     if value in (None, ""):
         return None
-    return " ".join(str(value).strip().lower().split())
+    cleaned = []
+    for char in str(value).strip().lower():
+        if char.isalnum() or char.isspace():
+            cleaned.append(char)
+        else:
+            cleaned.append(" ")
+    return " ".join("".join(cleaned).split())
+
+
+def _title_tokens(value: object) -> list[str]:
+    title = _normalise_title(value)
+    return title.split() if title else []
+
+
+def _titles_have_major_conflict(left: object, right: object) -> bool:
+    left_tokens = _title_tokens(left)
+    right_tokens = _title_tokens(right)
+    if not left_tokens or not right_tokens:
+        return False
+    if left_tokens == right_tokens:
+        return False
+    shorter, longer = sorted((left_tokens, right_tokens), key=len)
+    return longer[: len(shorter)] != shorter
 
 
 def normalise_crossref_validation(payload: dict | None) -> dict:
@@ -47,9 +69,7 @@ def external_corroboration_for_work(work: dict, crossref_payload: dict | None) -
     if ref.get("year") and work.get("year") and abs(int(ref["year"]) - int(work["year"])) > 1:
         conflict_fields.append("publication_year")
 
-    work_title = _normalise_title(work.get("title"))
-    ref_title = _normalise_title(ref.get("title"))
-    if work_title and ref_title and work_title != ref_title:
+    if _titles_have_major_conflict(work.get("title"), ref.get("title")):
         conflict_fields.append("title")
 
     has_external_corroboration = bool(work.get("doi") and ref.get("doi") and work["doi"] == ref["doi"])
