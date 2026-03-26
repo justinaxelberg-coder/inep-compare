@@ -84,6 +84,26 @@ def _matches_run_id(path: Path) -> str:
     return run_id
 
 
+def _latest_records_run_id(processed_dir: Path = PROCESSED) -> str:
+    files = sorted(processed_dir.glob("records_*.parquet"))
+    if not files:
+        raise FileNotFoundError(
+            "No records_*.parquet files found in data/processed. "
+            "Run the harvest/export pipeline first."
+        )
+    return _latest_run_id(files, _records_run_id)
+
+
+def _latest_matches_run_id(processed_dir: Path = PROCESSED) -> str:
+    files = sorted(processed_dir.glob("matches_phase2_*.parquet"))
+    if not files:
+        raise FileNotFoundError(
+            "No matches_phase2_*.parquet files found in data/processed. "
+            "Run the phase 2 matching pipeline first."
+        )
+    return _latest_run_id(files, _matches_run_id)
+
+
 def _split_records_path(path: Path) -> tuple[str, str]:
     stem = path.stem
     prefix = "records_"
@@ -98,13 +118,7 @@ def _split_records_path(path: Path) -> tuple[str, str]:
 
 def _load_latest_records(processed_dir: Path = PROCESSED) -> dict[str, list[dict]]:
     files = sorted(processed_dir.glob("records_*.parquet"))
-    if not files:
-        raise FileNotFoundError(
-            "No records_*.parquet files found in data/processed. "
-            "Run the harvest/export pipeline first."
-        )
-
-    latest_run_id = _latest_run_id(files, _records_run_id)
+    latest_run_id = _latest_records_run_id(processed_dir=processed_dir)
     records_by_source: dict[str, list[dict]] = {}
     for path in files:
         source, run_id = _split_records_path(path)
@@ -125,14 +139,7 @@ def _load_latest_records(processed_dir: Path = PROCESSED) -> dict[str, list[dict
 
 
 def _load_latest_matches(processed_dir: Path = PROCESSED) -> pd.DataFrame:
-    files = sorted(processed_dir.glob("matches_phase2_*.parquet"))
-    if not files:
-        raise FileNotFoundError(
-            "No matches_phase2_*.parquet files found in data/processed. "
-            "Run the phase 2 matching pipeline first."
-        )
-
-    latest_run_id = _latest_run_id(files, _matches_run_id)
+    latest_run_id = _latest_matches_run_id(processed_dir=processed_dir)
     latest_path = processed_dir / f"matches_phase2_{latest_run_id}.parquet"
     return pd.read_parquet(latest_path)
 
@@ -241,8 +248,12 @@ def _build_work_rows(
                     "has_external_corroboration": bool(validation["has_external_corroboration"]),
                     "has_major_conflict": bool(validation["has_major_conflict"]),
                     "introduced_major_conflict": "major_conflict" in flags,
-                    "introduced_weak_author_identity": "weak_author_identity" in flags,
-                    "introduced_weak_institution_linkage": "weak_institution_linkage" in flags,
+                    "introduced_weak_author_identity": (
+                        "weak_author_identity" in flags or "unverifiable_author_identity" in flags
+                    ),
+                    "introduced_weak_institution_linkage": (
+                        "weak_institution_linkage" in flags or "unverifiable_institution_linkage" in flags
+                    ),
                     "introduced_doi_expected_missing": "doi_expected_missing" in flags,
                     "conflict_fields": list(validation.get("conflict_fields") or []),
                     "flags": sorted(flags),
@@ -258,6 +269,14 @@ def run_reliability(
     processed_dir: Path = PROCESSED,
     output_dir: Path | None = None,
 ) -> dict[str, Path]:
+    latest_records_run_id = _latest_records_run_id(processed_dir=processed_dir)
+    latest_matches_run_id = _latest_matches_run_id(processed_dir=processed_dir)
+    if latest_records_run_id != latest_matches_run_id:
+        raise ValueError(
+            f"Latest records snapshot {latest_records_run_id} does not match latest matches snapshot "
+            f"{latest_matches_run_id}."
+        )
+
     records_by_source = _load_latest_records(processed_dir=processed_dir)
     matches_df = _load_latest_matches(processed_dir=processed_dir)
     mapping = canonical_ids_from_records(records_by_source, matches_df)
@@ -297,7 +316,7 @@ def main(argv: list[str] | None = None) -> int:
             args.run_id,
             processed_dir=Path(args.processed_dir),
         )
-    except FileNotFoundError as exc:
+    except (FileNotFoundError, ValueError) as exc:
         print(str(exc), file=sys.stderr)
         return 1
 

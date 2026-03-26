@@ -4,7 +4,7 @@ import pandas as pd
 import pytest
 
 from outputs.dataset.exporter import DatasetExporter
-from run_reliability import _load_latest_matches, _load_latest_records
+from run_reliability import _build_work_rows, _load_latest_matches, _load_latest_records, run_reliability
 
 
 def test_export_reliability_outputs_writes_expected_files(tmp_path):
@@ -512,6 +512,39 @@ def test_runner_loads_latest_records_and_matches_and_deserialises_nested_fields(
     assert matches_df.iloc[0]["record_id_a"] == "oa_new"
 
 
+def test_runner_rejects_mismatched_latest_snapshots(tmp_path, monkeypatch):
+    processed = tmp_path / "data" / "processed"
+    processed.mkdir(parents=True)
+    monkeypatch.chdir(tmp_path)
+
+    pd.DataFrame(
+        [
+            {
+                "source_record_id": "oa_new",
+                "title": "New title",
+                "year": 2024,
+                "record_type": "journal_article",
+                "authors": "[]",
+                "institutions": "[]",
+                "external_ids": "[]",
+            }
+        ]
+    ).to_parquet(processed / "records_openalex_2026-03-25.parquet", index=False)
+    pd.DataFrame(
+        [
+            {
+                "source_a": "openalex",
+                "source_b": "scopus",
+                "record_id_a": "oa_old",
+                "record_id_b": "sc_1",
+            }
+        ]
+    ).to_parquet(processed / "matches_phase2_2026-03-24.parquet", index=False)
+
+    with pytest.raises(ValueError, match="Latest records snapshot 2026-03-25 does not match latest matches snapshot 2026-03-24"):
+        run_reliability("2026-03-25-smoke", processed_dir=processed)
+
+
 def test_runner_fails_fast_when_records_are_missing(tmp_path, monkeypatch):
     processed = tmp_path / "data" / "processed"
     processed.mkdir(parents=True)
@@ -519,3 +552,28 @@ def test_runner_fails_fast_when_records_are_missing(tmp_path, monkeypatch):
 
     with pytest.raises(FileNotFoundError, match="No records_\\*.parquet files found in data/processed"):
         _load_latest_records(processed_dir=processed)
+
+
+def test_build_work_rows_marks_unverifiable_author_and_institution_as_weak(tmp_path):
+    records_by_source = {
+        "openalex": [
+            {
+                "source_record_id": "oa_1",
+                "title": "Paper",
+                "year": 2024,
+                "record_type": "journal_article",
+                "authors": [],
+                "institutions": [],
+                "external_ids": [],
+                "doi": None,
+            }
+        ]
+    }
+
+    work_df = _build_work_rows(records_by_source, mapping={}, connector=None)
+
+    row = work_df.iloc[0]
+    assert bool(row["introduced_weak_author_identity"]) is True
+    assert bool(row["introduced_weak_institution_linkage"]) is True
+    assert row["flags"] and "unverifiable_author_identity" in row["flags"]
+    assert row["flags"] and "unverifiable_institution_linkage" in row["flags"]
