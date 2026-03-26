@@ -13,6 +13,7 @@ Writes:
 """
 
 from __future__ import annotations
+import argparse
 import logging
 import sys
 from datetime import date
@@ -22,7 +23,6 @@ import pandas as pd
 
 sys.path.insert(0, ".")
 from config.secrets_loader import load_secrets
-load_secrets()
 
 from scoring.fitness import FitnessScorer
 from outputs.dataset.exporter import DatasetExporter
@@ -177,7 +177,6 @@ _SUB_DIM_TO_FIELD = {
     "policy_document_rate":  "policy_rate",
     "patent_link_rate":      "patent_rate",
     "nonacademic_coauth":    "nonacademic_coauth",
-    "geographic_coverage_gap":"geographic_bias",
 }
 
 
@@ -217,8 +216,19 @@ def _load_enrichment_stratified(csv_dir: Path) -> dict[tuple[str, str], dict]:
     return result
 
 
+def _resolve_run_id(explicit_run_id: str | None) -> str:
+    if explicit_run_id:
+        return explicit_run_id
+    return str(date.today())
+
+
 def main() -> None:
-    run_id   = str(date.today())
+    load_secrets()
+    parser = argparse.ArgumentParser(description="Build source fitness outputs from processed data")
+    parser.add_argument("--run-id", help="Override the default date-based run_id for output files")
+    args = parser.parse_args()
+
+    run_id   = _resolve_run_id(args.run_id)
     exporter = DatasetExporter(output_dir="data/processed")
     scorer   = FitnessScorer()
 

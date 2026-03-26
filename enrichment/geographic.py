@@ -6,6 +6,26 @@ import pandas as pd
 
 logger = logging.getLogger(__name__)
 
+GEOGRAPHIC_COLUMNS: list[str] = [
+    "source",
+    "inst_type",
+    "region",
+    "n_records",
+    "source_publication_share",
+    "peer_mean_share",
+    "comparative_skew",
+    "cohort_institution_share",
+    "cohort_phd_faculty_share",
+    "delta_vs_cohort_institution_share",
+    "delta_vs_cohort_phd_faculty_share",
+    "cohort_institutions",
+]
+
+
+def _normalize_e_mec_codes(series: pd.Series) -> pd.Series:
+    values = series.astype(str).str.strip().str.lstrip("0")
+    return values.mask(values == "", "0")
+
 
 def compute_coverage_gap(registry: pd.DataFrame, indexed: set[str]) -> dict[str, float]:
     """Return {region: observed_rate - expected_rate}. Negative = under-indexed."""
@@ -101,3 +121,123 @@ def load_and_compute(registry_path: str, pub_counts: dict[str, int],
         "output_gaps": output_gaps,
         "geographic_bias_score": bias_score,
     }
+
+
+def build_geographic_comparison(
+    coverage_df: pd.DataFrame,
+    cohort_df: pd.DataFrame,
+) -> pd.DataFrame:
+    """Build per-source comparative publication skew by institution type and region.
+
+    The cohort is the evaluated crosswalk cohort, not the full national registry.
+    Geography is descriptive evidence only: raw source publication shares are compared
+    against peer mean shares, with cohort composition retained only as context.
+    """
+    if coverage_df.empty or cohort_df.empty:
+        return pd.DataFrame(columns=GEOGRAPHIC_COLUMNS)
+
+    cohort = cohort_df.copy()
+    coverage = coverage_df.copy()
+
+    if "sinaes_type" in cohort.columns and "inst_type" not in cohort.columns:
+        cohort = cohort.rename(columns={"sinaes_type": "inst_type"})
+
+    required_cohort = {"e_mec_code", "inst_type", "region"}
+    required_cov = {"source", "e_mec_code", "n_records"}
+    if not required_cohort.issubset(cohort.columns) or not required_cov.issubset(coverage.columns):
+        return pd.DataFrame(columns=GEOGRAPHIC_COLUMNS)
+
+    cohort["e_mec_code"] = _normalize_e_mec_codes(cohort["e_mec_code"])
+    coverage["e_mec_code"] = _normalize_e_mec_codes(coverage["e_mec_code"])
+    cohort["faculty_with_phd"] = pd.to_numeric(
+        cohort.get("faculty_with_phd", 0), errors="coerce"
+    ).fillna(0.0)
+    coverage["n_records"] = pd.to_numeric(coverage["n_records"], errors="coerce").fillna(0.0)
+
+    cohort = cohort[["e_mec_code", "inst_type", "region", "faculty_with_phd"]].drop_duplicates()
+    coverage = coverage[["source", "e_mec_code", "n_records"]]
+
+    strata = (
+        cohort.groupby(["inst_type", "region"], dropna=False)
+        .agg(
+            cohort_institutions=("e_mec_code", "nunique"),
+            cohort_phd_faculty_total=("faculty_with_phd", "sum"),
+        )
+        .reset_index()
+    )
+    if strata.empty:
+        return pd.DataFrame(columns=GEOGRAPHIC_COLUMNS)
+
+    total_institutions = float(strata["cohort_institutions"].sum())
+    total_phd = float(strata["cohort_phd_faculty_total"].sum())
+    strata["cohort_institution_share"] = (
+        strata["cohort_institutions"] / total_institutions if total_institutions else 0.0
+    )
+    strata["cohort_phd_faculty_share"] = (
+        strata["cohort_phd_faculty_total"] / total_phd if total_phd else 0.0
+    )
+
+    merged = coverage.merge(
+        cohort[["e_mec_code", "inst_type", "region"]],
+        on="e_mec_code",
+        how="inner",
+    )
+    sources = sorted(coverage["source"].dropna().astype(str).unique().tolist())
+    if not sources:
+        return pd.DataFrame(columns=GEOGRAPHIC_COLUMNS)
+
+    per_source = (
+        merged.groupby(["source", "inst_type", "region"], dropna=False)["n_records"]
+        .sum()
+        .reset_index()
+    )
+    source_totals = (
+        merged.groupby("source", dropna=False)["n_records"].sum().rename("source_total").reset_index()
+    )
+
+    stratum_pairs = strata[["inst_type", "region"]].drop_duplicates().copy()
+    grid = (
+        pd.DataFrame({"source": sources})
+        .assign(_join_key=1)
+        .merge(stratum_pairs.assign(_join_key=1), on="_join_key", how="inner")
+        .drop(columns="_join_key")
+    )
+
+    result = (
+        grid.merge(per_source, on=["source", "inst_type", "region"], how="left")
+        .merge(source_totals, on="source", how="left")
+        .merge(
+            strata[
+                [
+                    "inst_type",
+                    "region",
+                    "cohort_institutions",
+                    "cohort_institution_share",
+                    "cohort_phd_faculty_share",
+                ]
+            ],
+            on=["inst_type", "region"],
+            how="left",
+        )
+    )
+    result["n_records"] = result["n_records"].fillna(0.0)
+    result["source_total"] = result["source_total"].fillna(0.0)
+    result["source_publication_share"] = result.apply(
+        lambda r: float(r["n_records"]) / float(r["source_total"]) if float(r["source_total"]) > 0 else 0.0,
+        axis=1,
+    )
+    result["peer_mean_share"] = (
+        result.groupby(["inst_type", "region"], dropna=False)["source_publication_share"]
+        .transform("mean")
+    )
+    result["comparative_skew"] = result["source_publication_share"] - result["peer_mean_share"]
+    result["delta_vs_cohort_institution_share"] = (
+        result["source_publication_share"] - result["cohort_institution_share"]
+    )
+    result["delta_vs_cohort_phd_faculty_share"] = (
+        result["source_publication_share"] - result["cohort_phd_faculty_share"]
+    )
+
+    result = result[GEOGRAPHIC_COLUMNS].copy()
+    result["n_records"] = result["n_records"].astype(int)
+    return result.sort_values(["source", "inst_type", "region"]).reset_index(drop=True)

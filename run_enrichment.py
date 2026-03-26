@@ -14,7 +14,7 @@ load_secrets()
 
 from enrichment.coauthorship import compute_coauth_metrics
 from enrichment.diamond_oa import enrich_oa_file
-from enrichment.geographic import load_and_compute as geo_compute
+from enrichment.geographic import build_geographic_comparison
 from enrichment.sdg import SDG_LABELS, compute_sdg_rates, write_sdg_flag
 from enrichment.sensitivity import compute_sensitivity, aggregate_by_stratum, build_sensitivity_rows
 from enrichment.disambiguation import compute_disambiguation_rate, build_disambiguation_rows
@@ -30,7 +30,6 @@ logging.basicConfig(level=logging.INFO,
 logger = logging.getLogger(__name__)
 
 _PROCESSED = Path("data/processed")
-_REGISTRY  = Path("registry/institutions.csv")
 _METADATA  = _PROCESSED / "source_metadata.json"
 
 
@@ -38,13 +37,17 @@ def _load_crosswalk() -> pd.DataFrame:
     path = Path("registry/crosswalk_enriched.csv")
     if not path.exists():
         logger.warning("crosswalk_enriched.csv not found — stratified enrichment will be empty")
-        return pd.DataFrame(columns=["e_mec_code", "inst_type", "region"])
+        return pd.DataFrame(columns=["e_mec_code", "inst_type", "region", "faculty_with_phd"])
     df = pd.read_csv(path)
     # Strip leading zeros to match spotlight config format (e.g. "004925" → "4925")
     df["e_mec_code"] = df["e_mec_code"].astype(str).str.lstrip("0")
     if "sinaes_type" in df.columns and "inst_type" not in df.columns:
         df = df.rename(columns={"sinaes_type": "inst_type"})
-    return df[["e_mec_code", "inst_type", "region"]].dropna()
+    if "faculty_with_phd" not in df.columns:
+        df["faculty_with_phd"] = 0.0
+    return df[["e_mec_code", "inst_type", "region", "faculty_with_phd"]].dropna(
+        subset=["e_mec_code", "inst_type", "region"]
+    )
 
 
 def _to_papers_df(papers: list[dict]) -> pd.DataFrame:
@@ -74,13 +77,6 @@ def _resolve_date(date_str: str | None, processed: Path) -> str:
         logger.error("No phase 2 outputs found. Run run_phase2.py first.")
         sys.exit(1)
     return files[-1].stem.split("phase2_")[-1]
-
-
-def _pub_counts_from_coverage(coverage_csv: Path, source: str) -> dict[str, int]:
-    """Return {e_mec_code: n_records} for the given source from coverage CSV."""
-    df = pd.read_csv(coverage_csv)
-    subset = df[df["source"] == source][["e_mec_code", "n_records"]].dropna()
-    return dict(zip(subset["e_mec_code"].astype(str), subset["n_records"].astype(int)))
 
 
 def _fetch_papers_for_enrichment(source: str, e_mec_codes: list[str],
@@ -174,6 +170,7 @@ def main() -> None:
 
     coverage_files = sorted(_PROCESSED.glob(f"coverage_phase2_{date}*.csv"))
     coverage_csv = coverage_files[-1] if coverage_files else None
+    xw = _load_crosswalk()
 
     # 1. Diamond OA (in-place, no API)
     if not args.skip_diamond:
@@ -183,27 +180,16 @@ def main() -> None:
         else:
             enrich_oa_file(oa_files[-1])
 
-    # 2. Geographic bias (no API — uses coverage CSV for pub counts)
+    # 2. Geographic comparison (no API — uses coverage CSV + evaluated cohort crosswalk)
     if not args.skip_geo and coverage_csv:
-        sources = pd.read_csv(coverage_csv)["source"].unique().tolist()
-        geo_rows = []
-        for source in sources:
-            pub_counts = _pub_counts_from_coverage(coverage_csv, source)
-            result = geo_compute(str(_REGISTRY), pub_counts, source)
-            if result:
-                logger.info("Geographic bias %s: score=%.3f", source,
-                            result["geographic_bias_score"])
-                for region, gap in result["coverage_gaps"].items():
-                    geo_rows.append({
-                        "source": source, "region": region,
-                        "coverage_gap": gap,
-                        "output_gap": result["output_gaps"].get(region),
-                        "geographic_bias_score": result["geographic_bias_score"],
-                    })
-        if geo_rows:
-            out = _PROCESSED / f"geographic_coverage_{date}.csv"
-            pd.DataFrame(geo_rows).to_csv(out, index=False)
-            logger.info("Wrote %s", out)
+        if xw.empty:
+            logger.warning("Crosswalk empty — skipping geographic comparison")
+        else:
+            geo_df = build_geographic_comparison(pd.read_csv(coverage_csv), xw)
+            if not geo_df.empty:
+                out = _PROCESSED / f"geographic_coverage_{date}.csv"
+                geo_df.to_csv(out, index=False)
+                logger.info("Wrote %s (%d rows)", out, len(geo_df))
 
     # 3. Coauthorship (OpenAlex API re-query with affiliation_types)
     if not args.skip_coauth:
@@ -247,7 +233,6 @@ def main() -> None:
                 logger.info("Wrote %s", out)
 
     # 5. Stratified enrichment (requires crosswalk + fetched papers)
-    xw = _load_crosswalk()
     if xw.empty:
         logger.warning("Crosswalk empty — skipping stratified enrichment")
     else:

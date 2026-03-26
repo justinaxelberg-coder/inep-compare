@@ -109,6 +109,7 @@ def test_patents_increase_innovation_score():
 from outputs.dataset.exporter import DatasetExporter
 import pandas as pd
 from pathlib import Path
+from run_fitness import _resolve_run_id
 
 def test_export_fitness_matrix_creates_csv(tmp_path):
     scorer = FitnessScorer()
@@ -193,3 +194,34 @@ def test_nonacademic_coauth_wired():
     p_high = scorer.build_profile(**base, nonacademic_coauth=0.80)
     p_low  = scorer.build_profile(**base, nonacademic_coauth=0.0)
     assert p_high.innovation_link > p_low.innovation_link
+
+
+def test_geography_not_accepted_as_profile_input():
+    scorer = FitnessScorer()
+    with pytest.raises(TypeError):
+        scorer.build_profile(
+            "openalex", "federal_university",
+            coverage=MOCK_COVERAGE["openalex"]["federal_university"],
+            oa=MOCK_OA["openalex"]["federal_university"],
+            convergence=MOCK_CONVERGENCE,
+            geographic_bias=0.25,
+        )
+
+
+def test_geographic_enrichment_does_not_change_composite():
+    scorer = FitnessScorer()
+    base = scorer.build_matrix(MOCK_COVERAGE, MOCK_OA, MOCK_CONVERGENCE)
+    with_geo = scorer.build_matrix(
+        MOCK_COVERAGE,
+        MOCK_OA,
+        MOCK_CONVERGENCE,
+        enrichment={("openalex", "federal_university"): {"geographic_bias": 0.0}},
+    )
+
+    base_openalex = next(r for r in base.rows if r.source == "openalex")
+    geo_openalex = next(r for r in with_geo.rows if r.source == "openalex")
+    assert geo_openalex.composite == pytest.approx(base_openalex.composite)
+
+
+def test_resolve_run_id_prefers_explicit_value():
+    assert _resolve_run_id("2026-03-25-geo-reframe") == "2026-03-25-geo-reframe"

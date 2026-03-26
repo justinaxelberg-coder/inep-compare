@@ -17,8 +17,7 @@ coverage:
   field_coverage: 0.20
   temporal_coverage: 0.15
   language_coverage: 0.20
-  geographic_bias: 0.10
-  equity_representation: 0.10   # sums slightly over — normalised at runtime
+  equity_representation: 0.10
 
 data_quality:
   completeness: 0.30
