@@ -24,3 +24,11 @@ def test_external_corroboration_flags_major_conflict_on_type():
     crossref = {"doi": "10.1234/x", "title": "Observed work title", "year": 2023, "record_type": "book"}
     result = external_corroboration_for_work(work, crossref)
     assert result["has_major_conflict"] is True
+
+
+def test_external_corroboration_flags_major_conflict_on_title_mismatch():
+    work = {"doi": "10.1234/x", "title": "Observed work title", "year": 2023, "record_type": "journal_article"}
+    crossref = {"doi": "10.1234/x", "title": "Different work title", "year": 2023, "record_type": "journal_article"}
+    result = external_corroboration_for_work(work, crossref)
+    assert result["has_major_conflict"] is True
+    assert "title" in result["conflict_fields"]

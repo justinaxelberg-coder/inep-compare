@@ -16,6 +16,12 @@ def _normalise_year(value: object) -> int | None:
         return None
 
 
+def _normalise_title(value: object) -> str | None:
+    if value in (None, ""):
+        return None
+    return " ".join(str(value).strip().lower().split())
+
+
 def normalise_crossref_validation(payload: dict | None) -> dict:
     if not payload:
         return {}
@@ -40,6 +46,11 @@ def external_corroboration_for_work(work: dict, crossref_payload: dict | None) -
 
     if ref.get("year") and work.get("year") and abs(int(ref["year"]) - int(work["year"])) > 1:
         conflict_fields.append("publication_year")
+
+    work_title = _normalise_title(work.get("title"))
+    ref_title = _normalise_title(ref.get("title"))
+    if work_title and ref_title and work_title != ref_title:
+        conflict_fields.append("title")
 
     has_external_corroboration = bool(work.get("doi") and ref.get("doi") and work["doi"] == ref["doi"])
 
