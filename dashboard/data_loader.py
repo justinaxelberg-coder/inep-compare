@@ -12,6 +12,51 @@ STRATIFIED_SCHEMA: list[str] = [
     "source", "inst_type", "region", "sub_dimension",
     "value", "n_papers", "confidence_tier",
 ]
+GEOGRAPHIC_COLUMNS: list[str] = [
+    "source",
+    "inst_type",
+    "region",
+    "n_records",
+    "source_publication_share",
+    "peer_mean_share",
+    "comparative_skew",
+    "cohort_institution_share",
+    "cohort_phd_faculty_share",
+    "delta_vs_cohort_institution_share",
+    "delta_vs_cohort_phd_faculty_share",
+    "cohort_institutions",
+]
+SOURCE_RELIABILITY_SUMMARY_COLUMNS: list[str] = [
+    "source",
+    "record_type",
+    "canonical_works",
+    "integration_ready_works",
+    "reviewable_disputed_works",
+    "not_integration_ready_works",
+    "high_confidence_works",
+    "medium_confidence_works",
+    "low_confidence_works",
+    "externally_corroborated_works",
+    "major_conflict_works",
+    "doi_expected_missing_works",
+    "integration_ready_share",
+    "reviewable_disputed_share",
+    "not_integration_ready_share",
+    "high_confidence_share",
+    "medium_confidence_share",
+    "low_confidence_share",
+    "external_corroboration_share",
+    "major_conflict_share",
+    "doi_expected_missing_share",
+]
+SOURCE_RELIABILITY_FLAG_COLUMNS: list[str] = [
+    "source",
+    "record_type",
+    "flag",
+    "n_works",
+    "denominator",
+    "share",
+]
 
 FITNESS_COLUMNS: list[str] = [
     "source", "inst_type", "coverage", "data_quality", "reliability",
@@ -149,21 +194,22 @@ def _read_csvs(
 
 
 def load_geographic(csv_dir: Path | None = None) -> pd.DataFrame:
-    """Return geographic coverage gap DataFrame.
-    Columns: source, region, coverage_gap, output_gap, geographic_bias_score
-    """
+    """Return dedicated geographic comparison DataFrame."""
     csv_dir = Path(csv_dir) if csv_dir else _DEFAULT_PROCESSED
     files = sorted(Path(csv_dir).glob("geographic_coverage_*.csv"))
     if not files:
         logger.warning("No geographic_coverage_*.csv found")
-        return pd.DataFrame(columns=["source","region","coverage_gap","output_gap","geographic_bias_score"])
+        return pd.DataFrame(columns=GEOGRAPHIC_COLUMNS)
     try:
         df = pd.read_csv(files[-1])
+        if not set(GEOGRAPHIC_COLUMNS).issubset(df.columns):
+            logger.warning("Geographic file %s uses unsupported legacy schema", files[-1].name)
+            return pd.DataFrame(columns=GEOGRAPHIC_COLUMNS)
         logger.info("Loaded %d geographic rows from %s", len(df), files[-1].name)
-        return df
+        return _ensure_columns(df, GEOGRAPHIC_COLUMNS)
     except Exception as exc:
         logger.warning("Geographic load failed: %s", exc)
-        return pd.DataFrame(columns=["source","region","coverage_gap","output_gap","geographic_bias_score"])
+        return pd.DataFrame(columns=GEOGRAPHIC_COLUMNS)
 
 
 def load_sdg(csv_dir: Path | None = None) -> pd.DataFrame:
@@ -222,30 +268,49 @@ def load_sdg_stratified(csv_dir: Path | None = None) -> pd.DataFrame:
 
 
 def load_enrichment_combined(csv_dir: Path | None = None) -> pd.DataFrame:
-    """Merge geographic, sensitivity, SDG, and metadata quality into one stratified DataFrame."""
+    """Merge non-geographic enrichment sources into one stratified DataFrame."""
     csv_dir = Path(csv_dir) if csv_dir else _DEFAULT_PROCESSED
     frames = []
-    geo_files = sorted(Path(csv_dir).glob("geographic_coverage_*.csv"))
-    if geo_files:
-        g = pd.read_csv(geo_files[-1])
-        if "inst_type" not in g.columns:
-            g["inst_type"] = "all"
-        if "sub_dimension" not in g.columns:
-            if "geographic_bias_score" in g.columns:
-                g = g.rename(columns={"geographic_bias_score": "value"})
-            g["sub_dimension"] = "geographic_coverage_gap"
-            g["n_papers"] = 0
-            g["confidence_tier"] = "low"
-        if all(c in g.columns for c in STRATIFIED_SCHEMA):
-            frames.append(g[STRATIFIED_SCHEMA])
-        else:
-            frames.append(g)
     for loader in [load_sensitivity, load_metadata_quality, load_sdg_stratified]:
-        frames.append(loader(csv_dir))
+        df = loader(csv_dir)
+        if not df.empty:
+            frames.append(df)
     if not frames:
         return pd.DataFrame(columns=STRATIFIED_SCHEMA)
     result = pd.concat(frames, ignore_index=True)
     return result[[c for c in STRATIFIED_SCHEMA if c in result.columns]]
+
+
+def load_source_reliability_summary(csv_dir: Path | None = None) -> pd.DataFrame:
+    """Load the latest source reliability summary CSV, if present."""
+    csv_dir = Path(csv_dir) if csv_dir else _DEFAULT_PROCESSED
+    files = sorted(Path(csv_dir).glob("source_reliability_summary_*.csv"))
+    if not files:
+        logger.warning("No source_reliability_summary_*.csv found")
+        return pd.DataFrame(columns=SOURCE_RELIABILITY_SUMMARY_COLUMNS)
+    try:
+        df = pd.read_csv(files[-1])
+        logger.info("Loaded %d source reliability summary rows from %s", len(df), files[-1].name)
+        return _ensure_columns(df, SOURCE_RELIABILITY_SUMMARY_COLUMNS)
+    except Exception as exc:
+        logger.warning("Source reliability summary load failed: %s", exc)
+        return pd.DataFrame(columns=SOURCE_RELIABILITY_SUMMARY_COLUMNS)
+
+
+def load_source_reliability_flags(csv_dir: Path | None = None) -> pd.DataFrame:
+    """Load the latest source reliability flags CSV, if present."""
+    csv_dir = Path(csv_dir) if csv_dir else _DEFAULT_PROCESSED
+    files = sorted(Path(csv_dir).glob("source_reliability_flags_*.csv"))
+    if not files:
+        logger.warning("No source_reliability_flags_*.csv found")
+        return pd.DataFrame(columns=SOURCE_RELIABILITY_FLAG_COLUMNS)
+    try:
+        df = pd.read_csv(files[-1])
+        logger.info("Loaded %d source reliability flag rows from %s", len(df), files[-1].name)
+        return _ensure_columns(df, SOURCE_RELIABILITY_FLAG_COLUMNS)
+    except Exception as exc:
+        logger.warning("Source reliability flags load failed: %s", exc)
+        return pd.DataFrame(columns=SOURCE_RELIABILITY_FLAG_COLUMNS)
 
 
 def load_source_metadata(processed_dir: Path | None = None) -> dict:

@@ -14,12 +14,18 @@ from dash import Input, Output, dcc, html
 from dashboard.data_loader import (
     load_convergence,
     load_fitness_profiles,
+    load_geographic,
     load_registry,
+    load_enrichment_combined,
+    load_source_metadata,
+    load_source_reliability_summary,
+    load_source_reliability_flags,
 )
 from dashboard.tabs import fitness as fitness_tab
 from dashboard.tabs import convergence as convergence_tab
 from dashboard.tabs import registry as registry_tab
 from dashboard.tabs import enrichment as enrichment_tab
+from dashboard.tabs import reliability as reliability_tab
 
 logging.basicConfig(
     level=logging.INFO,
@@ -46,9 +52,13 @@ logger.info("Loading institution registry...")
 _registry_df = load_registry(csv_dir=_REGISTRY)
 
 logger.info("Loading enrichment data...")
-from dashboard.data_loader import load_enrichment_combined, load_source_metadata
+_geographic_df = load_geographic(csv_dir=_PROCESSED)
 _enrichment_df = load_enrichment_combined(csv_dir=_PROCESSED)
 _metadata      = load_source_metadata(processed_dir=_PROCESSED)
+
+logger.info("Loading reliability data...")
+_reliability_summary_df = load_source_reliability_summary(csv_dir=_PROCESSED)
+_reliability_flags_df = load_source_reliability_flags(csv_dir=_PROCESSED)
 
 logger.info(
     "Data ready: %d fitness rows, %d overlap rows, %d institutions",
@@ -86,6 +96,8 @@ app.layout = dbc.Container(
                         style={"color": "#ccc"}, selected_style={"color": "#fff"}),
                 dcc.Tab(label="Enrichment",           value="tab-enrichment",
                         style={"color": "#ccc"}, selected_style={"color": "#fff"}),
+                dcc.Tab(label="Reliability",          value="tab-reliability",
+                        style={"color": "#ccc"}, selected_style={"color": "#fff"}),
             ],
         ),
         html.Div(id="tab-content", className="mt-2"),
@@ -105,7 +117,9 @@ def render_tab(tab: str):
     if tab == "tab-registry":
         return registry_tab.layout(_registry_df)
     if tab == "tab-enrichment":
-        return enrichment_tab.layout(_enrichment_df, _metadata)
+        return enrichment_tab.layout(_geographic_df, _enrichment_df, _metadata)
+    if tab == "tab-reliability":
+        return reliability_tab.layout(_reliability_summary_df, _reliability_flags_df)
     return html.P("Unknown tab.", className="text-muted")
 
 
@@ -113,6 +127,7 @@ fitness_tab.register_callbacks(app)
 convergence_tab.register_callbacks(app)
 registry_tab.register_callbacks(app)
 enrichment_tab.register_callbacks(app)
+reliability_tab.register_callbacks(app)
 
 
 if __name__ == "__main__":

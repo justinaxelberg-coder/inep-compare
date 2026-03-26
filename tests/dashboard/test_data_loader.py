@@ -8,10 +8,18 @@ from dashboard.data_loader import (
     load_fitness_profiles,
     load_convergence,
     load_registry,
+    load_geographic,
+    load_enrichment_combined,
+    load_source_reliability_summary,
+    load_source_reliability_flags,
     FITNESS_COLUMNS,
     CONVERGENCE_COLUMNS,
     DIVERGENCE_COLUMNS,
     REGISTRY_COLUMNS,
+    STRATIFIED_SCHEMA,
+    GEOGRAPHIC_COLUMNS,
+    SOURCE_RELIABILITY_SUMMARY_COLUMNS,
+    SOURCE_RELIABILITY_FLAG_COLUMNS,
 )
 
 
@@ -80,6 +88,27 @@ def registry_csv(tmp_path):
         "phd_faculty_share": 0.80, "censo_year": 2023,
     }])
     path = tmp_path / "institutions.csv"
+    df.to_csv(path, index=False)
+    return tmp_path
+
+
+@pytest.fixture
+def geographic_csv(tmp_path):
+    df = pd.DataFrame([{
+        "source": "openalex",
+        "inst_type": "federal_university",
+        "region": "Sudeste",
+        "n_records": 70,
+        "source_publication_share": 0.70,
+        "peer_mean_share": 0.45,
+        "comparative_skew": 0.25,
+        "cohort_institution_share": 0.33,
+        "cohort_phd_faculty_share": 0.50,
+        "delta_vs_cohort_institution_share": 0.37,
+        "delta_vs_cohort_phd_faculty_share": 0.20,
+        "cohort_institutions": 1,
+    }])
+    path = tmp_path / "geographic_coverage_2026-03-25.csv"
     df.to_csv(path, index=False)
     return tmp_path
 
@@ -189,3 +218,83 @@ def test_registry_empty_is_dataframe(tmp_path):
 def test_registry_empty_has_zero_rows(tmp_path):
     df = load_registry(csv_dir=tmp_path)
     assert len(df) == 0
+
+
+# --- load_geographic ---
+
+def test_geographic_loads_comparison_schema(geographic_csv):
+    df = load_geographic(csv_dir=geographic_csv)
+    assert set(GEOGRAPHIC_COLUMNS).issubset(df.columns)
+    assert df.iloc[0]["comparative_skew"] == 0.25
+
+
+def test_combined_loader_excludes_geography(geographic_csv):
+    df = load_enrichment_combined(csv_dir=geographic_csv)
+    assert df.empty
+    assert list(df.columns) == STRATIFIED_SCHEMA
+
+
+# --- load_source_reliability_summary ---
+
+def test_load_source_reliability_summary_empty_has_expected_columns(tmp_path):
+    df = load_source_reliability_summary(csv_dir=tmp_path)
+    assert isinstance(df, pd.DataFrame)
+    assert list(df.columns) == SOURCE_RELIABILITY_SUMMARY_COLUMNS
+    assert len(df) == 0
+
+
+def test_load_source_reliability_summary_reads_latest(tmp_path):
+    older = pd.DataFrame([{
+        "source": "openalex",
+        "record_type": "__all__",
+        "canonical_works": 1,
+        "integration_ready_share": 1.0,
+    }])
+    newer = pd.DataFrame([{
+        "source": "scopus",
+        "record_type": "__all__",
+        "canonical_works": 2,
+        "integration_ready_share": 0.5,
+    }])
+    older.to_csv(tmp_path / "source_reliability_summary_2026-03-24.csv", index=False)
+    newer.to_csv(tmp_path / "source_reliability_summary_2026-03-25.csv", index=False)
+
+    df = load_source_reliability_summary(csv_dir=tmp_path)
+
+    assert len(df) == 1
+    assert df.iloc[0]["source"] == "scopus"
+
+
+# --- load_source_reliability_flags ---
+
+def test_load_source_reliability_flags_empty_has_expected_columns(tmp_path):
+    df = load_source_reliability_flags(csv_dir=tmp_path)
+    assert isinstance(df, pd.DataFrame)
+    assert list(df.columns) == SOURCE_RELIABILITY_FLAG_COLUMNS
+    assert len(df) == 0
+
+
+def test_load_source_reliability_flags_reads_latest(tmp_path):
+    older = pd.DataFrame([{
+        "source": "openalex",
+        "record_type": "journal_article",
+        "flag": "major_conflict",
+        "n_works": 1,
+        "denominator": 2,
+        "share": 0.5,
+    }])
+    newer = pd.DataFrame([{
+        "source": "scopus",
+        "record_type": "thesis",
+        "flag": "doi_expected_missing",
+        "n_works": 2,
+        "denominator": 4,
+        "share": 0.5,
+    }])
+    older.to_csv(tmp_path / "source_reliability_flags_2026-03-24.csv", index=False)
+    newer.to_csv(tmp_path / "source_reliability_flags_2026-03-25.csv", index=False)
+
+    df = load_source_reliability_flags(csv_dir=tmp_path)
+
+    assert len(df) == 1
+    assert df.iloc[0]["flag"] == "doi_expected_missing"
