@@ -570,3 +570,128 @@ class DatasetExporter:
         path.write_text("\n".join(lines), encoding="utf-8")
         logger.info(f"Sprint 1 report: {path}")
         return path
+
+    # ------------------------------------------------------------------
+    # Reliability
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _normalise_flag_values(value: object) -> list[str]:
+        if value in (None, ""):
+            return []
+        if isinstance(value, str):
+            return [value]
+        if isinstance(value, (list, tuple, set, frozenset)):
+            flags = []
+            for item in value:
+                if item in (None, ""):
+                    continue
+                flags.append(str(item))
+            return sorted(dict.fromkeys(flags))
+        return [str(value)]
+
+    def _build_reliability_flags_table(self, source_record_df: pd.DataFrame) -> pd.DataFrame:
+        columns = ["source", "record_type", "flag", "n_works", "denominator", "share"]
+        if source_record_df.empty:
+            return pd.DataFrame(columns=columns)
+
+        required = ["source", "canonical_work_id", "source_record_id", "record_type", "flags"]
+        frame = source_record_df.copy()
+        for column in required:
+            if column not in frame.columns:
+                frame[column] = None
+
+        frame = frame.sort_values(
+            ["source", "canonical_work_id", "source_record_id"],
+            kind="stable",
+            na_position="last",
+        )
+        frame["flags"] = frame["flags"].apply(self._normalise_flag_values)
+
+        grouped = frame.groupby(["source", "canonical_work_id"], as_index=False).agg(
+            record_type=("record_type", "first"),
+            flags=("flags", lambda series: sorted({flag for values in series for flag in values})),
+        )
+
+        rows: list[pd.DataFrame] = []
+        overall_denominator = (
+            grouped.groupby("source", as_index=False)["canonical_work_id"].nunique().rename(
+                columns={"canonical_work_id": "denominator"}
+            )
+        )
+        if not overall_denominator.empty:
+            overall = grouped.explode("flags").dropna(subset=["flags"])
+            if not overall.empty:
+                overall = (
+                    overall.groupby(["source", "flags"], as_index=False)["canonical_work_id"]
+                    .nunique()
+                    .rename(columns={"flags": "flag", "canonical_work_id": "n_works"})
+                    .merge(overall_denominator, on="source", how="left")
+                )
+                overall["record_type"] = "__all__"
+                overall["share"] = overall["n_works"] / overall["denominator"]
+                rows.append(overall[columns])
+
+        typed = grouped[grouped["record_type"].notna()].explode("flags").dropna(subset=["flags"])
+        if not typed.empty:
+            typed = (
+                typed.groupby(["source", "record_type", "flags"], as_index=False)["canonical_work_id"]
+                .nunique()
+                .rename(columns={"flags": "flag", "canonical_work_id": "n_works"})
+            )
+            denominators = (
+                grouped[grouped["record_type"].notna()]
+                .groupby(["source", "record_type"], as_index=False)["canonical_work_id"]
+                .nunique()
+                .rename(columns={"canonical_work_id": "denominator"})
+            )
+            typed = typed.merge(denominators, on=["source", "record_type"], how="left")
+            typed["share"] = typed["n_works"] / typed["denominator"]
+            rows.append(typed[columns])
+
+        if not rows:
+            return pd.DataFrame(columns=columns)
+
+        return (
+            pd.concat(rows, ignore_index=True)
+            .sort_values(["source", "record_type", "flag"], kind="stable")
+            .reset_index(drop=True)
+        )
+
+    def export_reliability_outputs(
+        self,
+        source_record_df: pd.DataFrame,
+        canonical_df: pd.DataFrame,
+        summary_df: pd.DataFrame,
+        run_id: str,
+    ) -> dict[str, Path]:
+        from outputs.reports.reliability import build_reliability_report
+
+        source_record_path = self.output_dir / f"source_record_reliability_{run_id}.csv"
+        canonical_path = self.output_dir / f"canonical_work_reliability_{run_id}.csv"
+        summary_path = self.output_dir / f"source_reliability_summary_{run_id}.csv"
+        flags_path = self.output_dir / f"source_reliability_flags_{run_id}.csv"
+        report_path = self.output_dir / f"source_reliability_report_{run_id}.md"
+
+        source_record_df.to_csv(source_record_path, index=False)
+        canonical_df.to_csv(canonical_path, index=False)
+        summary_df.to_csv(summary_path, index=False)
+
+        flags_df = self._build_reliability_flags_table(source_record_df)
+        flags_df.to_csv(flags_path, index=False)
+
+        report_path.write_text(build_reliability_report(summary_df, flags_df, run_id), encoding="utf-8")
+
+        logger.info("Reliability source-record export: %s", source_record_path)
+        logger.info("Reliability canonical export: %s", canonical_path)
+        logger.info("Reliability summary export: %s", summary_path)
+        logger.info("Reliability flags export: %s", flags_path)
+        logger.info("Reliability report export: %s", report_path)
+
+        return {
+            "source_records": source_record_path,
+            "canonical": canonical_path,
+            "summary": summary_path,
+            "flags": flags_path,
+            "report": report_path,
+        }
