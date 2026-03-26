@@ -84,6 +84,115 @@ def test_source_record_table_keeps_attribution_fields():
     assert row["introduced_doi_expected_missing"] is True
 
 
+def test_canonical_ids_collapse_on_any_shared_external_id():
+    records_by_source = {
+        "openalex": [
+            {
+                "source_record_id": "oa_1",
+                "doi": None,
+                "external_ids": ["zdb:999", "pmid:123"],
+                "title": "Paper",
+                "year": 2023,
+                "record_type": "journal_article",
+                "authors": [{"orcid": "0000-0001"}],
+                "institutions": [{"ror": "https://ror.org/03yrm5c26"}],
+            }
+        ],
+        "scopus": [
+            {
+                "source_record_id": "sc_1",
+                "doi": None,
+                "external_ids": ["arxiv:abc", "pmid:123"],
+                "title": "Paper",
+                "year": 2023,
+                "record_type": "journal_article",
+                "authors": [{"orcid": "0000-0001"}],
+                "institutions": [{"ror": "https://ror.org/03yrm5c26"}],
+            }
+        ],
+    }
+
+    mapping = canonical_ids_from_records(records_by_source, matches_df=None)
+
+    assert mapping[("openalex", "oa_1")]["match_basis"] == "external_id"
+    assert mapping[("openalex", "oa_1")]["canonical_work_id"] == mapping[("scopus", "sc_1")]["canonical_work_id"]
+
+
+def test_fallback_grouping_does_not_merge_distinct_matched_components():
+    records_by_source = {
+        "openalex": [
+            {
+                "source_record_id": "oa_1",
+                "doi": None,
+                "external_ids": [],
+                "title": "Shared title",
+                "year": 2023,
+                "record_type": "journal_article",
+                "authors": [{"orcid": "0000-0001"}],
+                "institutions": [{"ror": "https://ror.org/03yrm5c26"}],
+            },
+            {
+                "source_record_id": "oa_2",
+                "doi": None,
+                "external_ids": [],
+                "title": "Shared title",
+                "year": 2023,
+                "record_type": "journal_article",
+                "authors": [{"orcid": "0000-0001"}],
+                "institutions": [{"ror": "https://ror.org/03yrm5c26"}],
+            },
+        ],
+        "scopus": [
+            {
+                "source_record_id": "sc_1",
+                "doi": None,
+                "external_ids": [],
+                "title": "Shared title",
+                "year": 2023,
+                "record_type": "journal_article",
+                "authors": [{"orcid": "0000-0001"}],
+                "institutions": [{"ror": "https://ror.org/03yrm5c26"}],
+            },
+            {
+                "source_record_id": "sc_2",
+                "doi": None,
+                "external_ids": [],
+                "title": "Shared title",
+                "year": 2023,
+                "record_type": "journal_article",
+                "authors": [{"orcid": "0000-0001"}],
+                "institutions": [{"ror": "https://ror.org/03yrm5c26"}],
+            },
+        ],
+    }
+    matches_df = pd.DataFrame(
+        [
+            {
+                "source_a": "openalex",
+                "source_b": "scopus",
+                "record_id_a": "oa_1",
+                "record_id_b": "sc_1",
+                "match_key": "title_year_author",
+                "confidence": 0.85,
+            },
+            {
+                "source_a": "openalex",
+                "source_b": "scopus",
+                "record_id_a": "oa_2",
+                "record_id_b": "sc_2",
+                "match_key": "title_year_author",
+                "confidence": 0.85,
+            },
+        ]
+    )
+
+    mapping = canonical_ids_from_records(records_by_source, matches_df)
+
+    assert mapping[("openalex", "oa_1")]["canonical_work_id"] == mapping[("scopus", "sc_1")]["canonical_work_id"]
+    assert mapping[("openalex", "oa_2")]["canonical_work_id"] == mapping[("scopus", "sc_2")]["canonical_work_id"]
+    assert mapping[("openalex", "oa_1")]["canonical_work_id"] != mapping[("openalex", "oa_2")]["canonical_work_id"]
+
+
 def test_source_summary_counts_unique_canonical_works_not_rows():
     work_df = pd.DataFrame(
         [

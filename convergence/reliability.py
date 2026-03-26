@@ -40,15 +40,28 @@ _BOOL_COLUMNS = [
 class _DisjointSet:
     def __init__(self) -> None:
         self.parent: dict[tuple[str, str], tuple[str, str]] = {}
+        self.root_has_match: dict[tuple[str, str], bool] = {}
 
     def add(self, item: tuple[str, str]) -> None:
         self.parent.setdefault(item, item)
+        self.root_has_match.setdefault(item, False)
 
     def find(self, item: tuple[str, str]) -> tuple[str, str]:
         parent = self.parent[item]
         if parent != item:
             self.parent[item] = self.find(parent)
         return self.parent[item]
+
+    def mark_matched(self, item: tuple[str, str]) -> None:
+        root = self.find(item)
+        self.root_has_match[root] = True
+
+    def can_union_as_fallback(self, left: tuple[str, str], right: tuple[str, str]) -> bool:
+        left_root = self.find(left)
+        right_root = self.find(right)
+        if left_root == right_root:
+            return False
+        return not (self.root_has_match.get(left_root, False) and self.root_has_match.get(right_root, False))
 
     def union(self, left: tuple[str, str], right: tuple[str, str]) -> None:
         left_root = self.find(left)
@@ -57,8 +70,12 @@ class _DisjointSet:
             return
         if left_root <= right_root:
             self.parent[right_root] = left_root
+            self.root_has_match[left_root] = self.root_has_match.get(left_root, False) or self.root_has_match.get(right_root, False)
+            self.root_has_match.pop(right_root, None)
         else:
             self.parent[left_root] = right_root
+            self.root_has_match[right_root] = self.root_has_match.get(left_root, False) or self.root_has_match.get(right_root, False)
+            self.root_has_match.pop(left_root, None)
 
 
 def _normalise_external_id(value: object) -> str | None:
@@ -91,16 +108,20 @@ def _first_institution_identity(record: dict) -> str:
     return ""
 
 
+def _external_id_keys(record: dict) -> list[str]:
+    return sorted(
+        external_id
+        for external_id in (_normalise_external_id(value) for value in (record.get("external_ids") or []))
+        if external_id
+    )
+
+
 def _fallback_canonical_key(record: dict) -> tuple[str, str]:
     doi = _normalise_doi(record.get("doi"))
     if doi:
         return "doi", f"doi::{doi}"
 
-    external_ids = sorted(
-        external_id
-        for external_id in (_normalise_external_id(value) for value in (record.get("external_ids") or []))
-        if external_id
-    )
+    external_ids = _external_id_keys(record)
     if external_ids:
         return "external_id", f"external::{external_ids[0]}"
 
@@ -124,6 +145,9 @@ def canonical_ids_from_records(
     components = _DisjointSet()
     matched_records: set[tuple[str, str]] = set()
     fallback_keys: dict[tuple[str, str], tuple[str, str]] = {}
+    doi_groups: dict[str, list[tuple[str, str]]] = defaultdict(list)
+    external_id_groups: dict[str, list[tuple[str, str]]] = defaultdict(list)
+    fallback_hash_groups: dict[str, list[tuple[str, str]]] = defaultdict(list)
 
     for source, records in sorted(records_by_source.items()):
         for record in records:
@@ -134,6 +158,14 @@ def canonical_ids_from_records(
             records_index[key] = record
             components.add(key)
             fallback_keys[key] = _fallback_canonical_key(record)
+            basis, fallback_key = fallback_keys[key]
+            if basis == "doi":
+                doi_groups[fallback_key].append(key)
+            elif basis == "external_id":
+                for external_id in _external_id_keys(record):
+                    external_id_groups[f"external::{external_id}"].append(key)
+            else:
+                fallback_hash_groups[fallback_key].append(key)
 
     if matches_df is not None and not matches_df.empty:
         for row in matches_df.to_dict("records"):
@@ -144,16 +176,17 @@ def canonical_ids_from_records(
             matched_records.add(left)
             matched_records.add(right)
             components.union(left, right)
+            components.mark_matched(left)
+            components.mark_matched(right)
 
-    fallback_groups: dict[str, list[tuple[str, str]]] = defaultdict(list)
-    for key, (_, fallback_key) in fallback_keys.items():
-        fallback_groups[fallback_key].append(key)
-    for members in fallback_groups.values():
-        if len(members) < 2:
-            continue
-        first = members[0]
-        for member in members[1:]:
-            components.union(first, member)
+    for fallback_groups in (doi_groups, external_id_groups, fallback_hash_groups):
+        for members in fallback_groups.values():
+            if len(members) < 2:
+                continue
+            first = members[0]
+            for member in members[1:]:
+                if components.can_union_as_fallback(first, member):
+                    components.union(first, member)
 
     grouped_members: dict[tuple[str, str], list[tuple[str, str]]] = defaultdict(list)
     for key in records_index:
