@@ -69,6 +69,20 @@ def test_validate_doi_returns_dict():
     assert result["brazilian_funder"] is True
     assert result["document_type"] == "journal-article"
 
+
+def test_validate_doi_returns_title_year_and_type():
+    conn = CrossrefConnector()
+    work = {
+        **_SAMPLE_WORK,
+        "title": ["Observed work title"],
+        "published": {"date-parts": [[2023, 1, 1]]},
+    }
+    with patch.object(conn, "_get_work", return_value=work):
+        result = conn.validate_doi("10.1234/test")
+    assert result["title"] == "Observed work title"
+    assert result["published_year"] == 2023
+    assert result["document_type"] == "journal-article"
+
 def test_validate_doi_missing_returns_none():
     conn = CrossrefConnector()
     with patch.object(conn, "_get_work", return_value=None):

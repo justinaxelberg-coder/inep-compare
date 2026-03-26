@@ -79,6 +79,10 @@ class CrossrefConnector:
         work = self._get_work(doi)
         if work is None:
             return None
+        titles = work.get("title") or []
+        published = work.get("published") or work.get("published-print") or {}
+        date_parts = published.get("date-parts") or [[None]]
+        year = date_parts[0][0] if date_parts and date_parts[0] else None
         funders = work.get("funder") or []
         return {
             "doi": doi,
@@ -89,6 +93,8 @@ class CrossrefConnector:
             "license_present": self.has_license(work),
             "ror_affiliation_present": self.has_ror_affiliation(work),
             "document_type": work.get("type"),
+            "title": titles[0] if titles else None,
+            "published_year": year,
         }
 
     def validate_batch(self, dois: list[str]) -> list[dict]:
