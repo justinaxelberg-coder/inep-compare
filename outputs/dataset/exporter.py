@@ -315,14 +315,36 @@ class DatasetExporter:
             except Exception:
                 pass
 
-        # Geographic coverage section
+        # Geographic comparison section
         _geo_files = sorted(Path("data/processed").glob("geographic_coverage_*.csv"))
         if _geo_files:
             try:
                 geo_df = pd.read_csv(_geo_files[-1])
-                lines.append("\n## Geographic Coverage Gap by Source\n")
-                lines.append(geo_df.to_markdown(index=False))
-                lines.append("")
+                if {"source", "inst_type", "region", "comparative_skew"}.issubset(geo_df.columns):
+                    lines.append("\n## Geographic Skew by Source\n")
+                    lines.append(
+                        "\n> This is a comparative coverage pattern, not a field-adjusted fairness estimate.\n"
+                    )
+                    for source in sorted(geo_df["source"].dropna().unique()):
+                        src = geo_df[geo_df["source"] == source].sort_values("comparative_skew")
+                        if src.empty:
+                            continue
+                        lines.append(f"\n### {source}\n")
+                        summary_rows = pd.concat([src.tail(1), src.head(1)], ignore_index=True).drop_duplicates()
+                        lines.append(summary_rows[[
+                            "inst_type",
+                            "region",
+                            "comparative_skew",
+                            "source_publication_share",
+                            "peer_mean_share",
+                            "cohort_institution_share",
+                            "cohort_phd_faculty_share",
+                            "n_records",
+                        ]].to_markdown(index=False))
+                        lines.append("")
+                else:
+                    lines.append("\n## Geographic Coverage\n")
+                    lines.append("\n> Legacy geographic output detected. Re-run enrichment to regenerate comparison output.\n")
             except Exception as _e:
                 logger.warning("Could not render geographic section: %s", _e)
 
@@ -590,7 +612,11 @@ class DatasetExporter:
             return sorted(dict.fromkeys(flags))
         return [str(value)]
 
-    def _build_reliability_flags_table(self, source_record_df: pd.DataFrame) -> pd.DataFrame:
+    def _build_reliability_flags_table(
+        self,
+        source_record_df: pd.DataFrame,
+        canonical_df: pd.DataFrame,
+    ) -> pd.DataFrame:
         columns = ["source", "record_type", "flag", "n_works", "denominator", "share"]
         if source_record_df.empty:
             return pd.DataFrame(columns=columns)
@@ -609,9 +635,23 @@ class DatasetExporter:
         frame["flags"] = frame["flags"].apply(self._normalise_flag_values)
 
         grouped = frame.groupby(["source", "canonical_work_id"], as_index=False).agg(
-            record_type=("record_type", "first"),
             flags=("flags", lambda series: sorted({flag for values in series for flag in values})),
         )
+
+        source_record_types = (
+            frame.groupby(["source", "canonical_work_id"], as_index=False)["record_type"]
+            .first()
+            .rename(columns={"record_type": "source_record_type"})
+        )
+        grouped = grouped.merge(source_record_types, on=["source", "canonical_work_id"], how="left")
+
+        canonical_types = canonical_df[["canonical_work_id", "record_type"]].drop_duplicates().copy()
+        if not canonical_types.empty:
+            canonical_types = canonical_types.rename(columns={"record_type": "canonical_record_type"})
+            grouped = grouped.merge(canonical_types, on="canonical_work_id", how="left")
+        else:
+            grouped["canonical_record_type"] = None
+        grouped["canonical_record_type"] = grouped["canonical_record_type"].fillna(grouped["source_record_type"])
 
         rows: list[pd.DataFrame] = []
         overall_denominator = (
@@ -632,20 +672,21 @@ class DatasetExporter:
                 overall["share"] = overall["n_works"] / overall["denominator"]
                 rows.append(overall[columns])
 
-        typed = grouped[grouped["record_type"].notna()].explode("flags").dropna(subset=["flags"])
+        typed = grouped[grouped["canonical_record_type"].notna()].explode("flags").dropna(subset=["flags"])
         if not typed.empty:
             typed = (
-                typed.groupby(["source", "record_type", "flags"], as_index=False)["canonical_work_id"]
+                typed.groupby(["source", "canonical_record_type", "flags"], as_index=False)["canonical_work_id"]
                 .nunique()
                 .rename(columns={"flags": "flag", "canonical_work_id": "n_works"})
             )
             denominators = (
-                grouped[grouped["record_type"].notna()]
-                .groupby(["source", "record_type"], as_index=False)["canonical_work_id"]
+                grouped[grouped["canonical_record_type"].notna()]
+                .groupby(["source", "canonical_record_type"], as_index=False)["canonical_work_id"]
                 .nunique()
                 .rename(columns={"canonical_work_id": "denominator"})
             )
-            typed = typed.merge(denominators, on=["source", "record_type"], how="left")
+            typed = typed.merge(denominators, on=["source", "canonical_record_type"], how="left")
+            typed = typed.rename(columns={"canonical_record_type": "record_type"})
             typed["share"] = typed["n_works"] / typed["denominator"]
             rows.append(typed[columns])
 
@@ -677,7 +718,7 @@ class DatasetExporter:
         canonical_df.to_csv(canonical_path, index=False)
         summary_df.to_csv(summary_path, index=False)
 
-        flags_df = self._build_reliability_flags_table(source_record_df)
+        flags_df = self._build_reliability_flags_table(source_record_df, canonical_df)
         flags_df.to_csv(flags_path, index=False)
 
         report_path.write_text(build_reliability_report(summary_df, flags_df, run_id), encoding="utf-8")
