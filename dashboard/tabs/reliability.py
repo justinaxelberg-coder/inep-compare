@@ -65,7 +65,8 @@ def _outcome_share_figure(summary_df: pd.DataFrame) -> go.Figure:
 
     overall = summary_df[summary_df["record_type"] == "__all__"].copy()
     if overall.empty:
-        overall = summary_df.copy()
+        fig.update_layout(title="No overall reliability summary data", **_DARK_LAYOUT)
+        return fig
 
     overall = _coerce_percent_columns(
         overall,
@@ -75,6 +76,13 @@ def _outcome_share_figure(summary_df: pd.DataFrame) -> go.Figure:
             "not_integration_ready_share",
         ],
     )
+    if overall[[
+        "integration_ready_share",
+        "reviewable_disputed_share",
+        "not_integration_ready_share",
+    ]].isna().all().all():
+        fig.update_layout(title="No overall reliability summary data", **_DARK_LAYOUT)
+        return fig
     overall = overall.sort_values("source", kind="stable")
 
     fig.add_bar(
@@ -115,6 +123,9 @@ def _record_type_figure(summary_df: pd.DataFrame, metric: str) -> go.Figure:
         return fig
 
     detail = _coerce_percent_columns(detail, [metric])
+    if detail[metric].isna().all():
+        fig.update_layout(title="No record-type reliability data", **_DARK_LAYOUT)
+        return fig
     for source, group in detail.groupby("source", sort=True):
         group = group.sort_values("record_type", kind="stable")
         fig.add_bar(name=str(source), x=group["record_type"].tolist(), y=group[metric].tolist())
@@ -173,5 +184,5 @@ def _coerce_percent_columns(df: pd.DataFrame, columns: list[str]) -> pd.DataFram
     frame = df.copy()
     for column in columns:
         if column in frame.columns:
-            frame[column] = pd.to_numeric(frame[column], errors="coerce").fillna(0.0)
+            frame[column] = pd.to_numeric(frame[column], errors="coerce")
     return frame

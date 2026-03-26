@@ -96,10 +96,35 @@ def test_outcome_share_chart_uses_expected_columns():
     assert len(fig.data) == 3
 
 
+def test_outcome_share_chart_requires_overall_rows():
+    summary = _SUMMARY[_SUMMARY["record_type"] != "__all__"].copy()
+    fig = reliability_tab._outcome_share_figure(summary)
+    assert len(fig.data) == 0
+    assert fig.layout.title.text == "No overall reliability summary data"
+
+
 def test_record_type_breakdown_figure_filters_out_overall_rows():
     fig = reliability_tab._record_type_figure(_SUMMARY, metric="integration_ready_share")
     assert fig.data
     assert all(trace.name == "openalex" for trace in fig.data)
+
+
+def test_record_type_breakdown_preserves_missing_values():
+    summary = pd.DataFrame([
+        {
+            "source": "openalex",
+            "record_type": "journal_article",
+            "integration_ready_share": 0.75,
+        },
+        {
+            "source": "scopus",
+            "record_type": "journal_article",
+            "integration_ready_share": pd.NA,
+        },
+    ])
+    fig = reliability_tab._record_type_figure(summary, metric="integration_ready_share")
+    assert len(fig.data) == 2
+    assert pd.isna(fig.data[1].y[0])
 
 
 def test_flag_table_handles_rows():
