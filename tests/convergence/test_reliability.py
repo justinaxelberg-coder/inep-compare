@@ -295,3 +295,100 @@ def test_canonical_work_summary_dedupes_sources():
 
     assert len(canonical) == 1
     assert canonical.iloc[0]["n_sources"] == 2
+
+
+def test_canonical_work_summary_includes_conflict_fields_column():
+    work_df = pd.DataFrame(
+        [
+            {
+                "canonical_work_id": "cw_1",
+                "source": "openalex",
+                "source_record_id": "oa_1",
+                "record_type": "journal_article",
+                "match_basis": "doi",
+                "outcome_state": "reviewable_disputed",
+                "confidence_band": "low",
+                "flags": ["major_conflict"],
+                "conflict_fields": ["title"],
+                "introduced_major_conflict": True,
+                "introduced_weak_author_identity": False,
+                "introduced_weak_institution_linkage": False,
+                "introduced_doi_expected_missing": False,
+                "has_external_corroboration": True,
+                "has_major_conflict": True,
+            },
+            {
+                "canonical_work_id": "cw_1",
+                "source": "scopus",
+                "source_record_id": "sc_1",
+                "record_type": "journal_article",
+                "match_basis": "doi",
+                "outcome_state": "reviewable_disputed",
+                "confidence_band": "low",
+                "flags": ["major_conflict"],
+                "conflict_fields": ["record_type", "title"],
+                "introduced_major_conflict": True,
+                "introduced_weak_author_identity": False,
+                "introduced_weak_institution_linkage": False,
+                "introduced_doi_expected_missing": False,
+                "has_external_corroboration": True,
+                "has_major_conflict": True,
+            },
+        ]
+    )
+
+    canonical = build_canonical_work_summary(work_df)
+
+    assert "conflict_fields" in canonical.columns
+    assert canonical.iloc[0]["conflict_fields"] == ["record_type", "title"]
+
+
+def test_source_summary_uses_doi_expected_missing_contract_names():
+    work_df = pd.DataFrame(
+        [
+            {
+                "canonical_work_id": "cw_1",
+                "source": "openalex",
+                "source_record_id": "oa_1",
+                "record_type": "journal_article",
+                "match_basis": "doi",
+                "outcome_state": "integration_ready",
+                "confidence_band": "high",
+                "flags": [],
+                "conflict_fields": [],
+                "introduced_major_conflict": False,
+                "introduced_weak_author_identity": False,
+                "introduced_weak_institution_linkage": False,
+                "introduced_doi_expected_missing": False,
+                "has_external_corroboration": True,
+                "has_major_conflict": False,
+            },
+            {
+                "canonical_work_id": "cw_2",
+                "source": "openalex",
+                "source_record_id": "oa_2",
+                "record_type": "journal_article",
+                "match_basis": "fallback",
+                "outcome_state": "not_integration_ready",
+                "confidence_band": "low",
+                "flags": ["doi_expected_missing"],
+                "conflict_fields": [],
+                "introduced_major_conflict": False,
+                "introduced_weak_author_identity": False,
+                "introduced_weak_institution_linkage": False,
+                "introduced_doi_expected_missing": True,
+                "has_external_corroboration": False,
+                "has_major_conflict": False,
+            },
+        ]
+    )
+
+    summary = build_source_reliability_summary(work_df)
+    overall = summary[(summary["source"] == "openalex") & (summary["record_type"] == "__all__")].iloc[0]
+
+    assert "doi_expected_missing_works" in summary.columns
+    assert "doi_expected_missing_share" in summary.columns
+    assert "doi_gap_works" not in summary.columns
+    assert "doi_gap_share" not in summary.columns
+    assert overall["doi_expected_missing_works"] == 1
+    assert overall["doi_expected_missing_share"] == 0.5

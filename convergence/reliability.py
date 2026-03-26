@@ -271,6 +271,14 @@ def _merge_flags(values: pd.Series) -> list[str]:
     return sorted(merged)
 
 
+def _merge_conflict_fields(values: pd.Series) -> list[str]:
+    merged: set[str] = set()
+    for value in values:
+        if isinstance(value, (list, tuple, set, frozenset)):
+            merged.update(str(item) for item in value if item not in (None, ""))
+    return sorted(merged)
+
+
 def _canonical_presence_table(source_record_df: pd.DataFrame, canonical_df: pd.DataFrame) -> pd.DataFrame:
     presence = source_record_df[["source", "canonical_work_id"]].drop_duplicates()
     return presence.merge(canonical_df, on="canonical_work_id", how="left", validate="many_to_one")
@@ -289,6 +297,7 @@ def build_canonical_work_summary(work_df: pd.DataFrame) -> pd.DataFrame:
                 "outcome_state",
                 "confidence_band",
                 "flags",
+                "conflict_fields",
                 "has_external_corroboration",
                 "has_major_conflict",
                 "introduced_major_conflict",
@@ -302,6 +311,7 @@ def build_canonical_work_summary(work_df: pd.DataFrame) -> pd.DataFrame:
     rows: list[dict] = []
     for canonical_work_id, group in work_df.groupby("canonical_work_id", sort=True):
         flags = _merge_flags(group["flags"])
+        conflict_fields = _merge_conflict_fields(group["conflict_fields"]) if "conflict_fields" in group else []
         record_type = _prefer_record_type(group["record_type"])
         introduced_doi_expected_missing = bool(group["introduced_doi_expected_missing"].fillna(False).any())
         doi_expected_missing = bool(
@@ -319,6 +329,7 @@ def build_canonical_work_summary(work_df: pd.DataFrame) -> pd.DataFrame:
                 "outcome_state": _select_outcome(group["outcome_state"]),
                 "confidence_band": _select_confidence(group["confidence_band"]),
                 "flags": flags,
+                "conflict_fields": conflict_fields,
                 "has_external_corroboration": bool(group["has_external_corroboration"].fillna(False).any()),
                 "has_major_conflict": bool(group["has_major_conflict"].fillna(False).any()),
                 "introduced_major_conflict": bool(group["introduced_major_conflict"].fillna(False).any()),
@@ -350,7 +361,7 @@ def _build_summary_rows(presence_df: pd.DataFrame) -> list[dict]:
             low_confidence = int((subset["confidence_band"] == LOW_CONFIDENCE).sum())
             externally_corroborated = int(subset["has_external_corroboration"].fillna(False).sum())
             major_conflicts = int(subset["has_major_conflict"].fillna(False).sum())
-            doi_gap_works = int(subset["doi_expected_missing"].fillna(False).sum())
+            doi_expected_missing_works = int(subset["doi_expected_missing"].fillna(False).sum())
             rows.append(
                 {
                     "source": source,
@@ -364,7 +375,7 @@ def _build_summary_rows(presence_df: pd.DataFrame) -> list[dict]:
                     "low_confidence_works": low_confidence,
                     "externally_corroborated_works": externally_corroborated,
                     "major_conflict_works": major_conflicts,
-                    "doi_gap_works": doi_gap_works,
+                    "doi_expected_missing_works": doi_expected_missing_works,
                     "integration_ready_share": _share(integration_ready, canonical_works),
                     "reviewable_disputed_share": _share(reviewable_disputed, canonical_works),
                     "not_integration_ready_share": _share(not_integration_ready, canonical_works),
@@ -373,7 +384,7 @@ def _build_summary_rows(presence_df: pd.DataFrame) -> list[dict]:
                     "low_confidence_share": _share(low_confidence, canonical_works),
                     "external_corroboration_share": _share(externally_corroborated, canonical_works),
                     "major_conflict_share": _share(major_conflicts, canonical_works),
-                    "doi_gap_share": _share(doi_gap_works, canonical_works),
+                    "doi_expected_missing_share": _share(doi_expected_missing_works, canonical_works),
                 }
             )
     return rows
@@ -399,7 +410,7 @@ def build_source_reliability_summary(
                 "low_confidence_works",
                 "externally_corroborated_works",
                 "major_conflict_works",
-                "doi_gap_works",
+                "doi_expected_missing_works",
                 "integration_ready_share",
                 "reviewable_disputed_share",
                 "not_integration_ready_share",
@@ -408,7 +419,7 @@ def build_source_reliability_summary(
                 "low_confidence_share",
                 "external_corroboration_share",
                 "major_conflict_share",
-                "doi_gap_share",
+                "doi_expected_missing_share",
             ]
         )
 
