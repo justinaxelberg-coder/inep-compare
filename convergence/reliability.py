@@ -362,6 +362,8 @@ def _build_summary_rows(presence_df: pd.DataFrame) -> list[dict]:
             externally_corroborated = int(subset["has_external_corroboration"].fillna(False).sum())
             major_conflicts = int(subset["has_major_conflict"].fillna(False).sum())
             doi_expected_missing_works = int(subset["doi_expected_missing"].fillna(False).sum())
+            doi_expected_subset = subset[subset["record_type"].apply(is_doi_expected)]
+            doi_expected_canonical_works = int(doi_expected_subset["canonical_work_id"].nunique())
             rows.append(
                 {
                     "source": source,
@@ -384,7 +386,7 @@ def _build_summary_rows(presence_df: pd.DataFrame) -> list[dict]:
                     "low_confidence_share": _share(low_confidence, canonical_works),
                     "external_corroboration_share": _share(externally_corroborated, canonical_works),
                     "major_conflict_share": _share(major_conflicts, canonical_works),
-                    "doi_expected_missing_share": _share(doi_expected_missing_works, canonical_works),
+                    "doi_expected_missing_share": _share(doi_expected_missing_works, doi_expected_canonical_works),
                 }
             )
     return rows

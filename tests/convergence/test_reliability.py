@@ -392,3 +392,71 @@ def test_source_summary_uses_doi_expected_missing_contract_names():
     assert "doi_gap_share" not in summary.columns
     assert overall["doi_expected_missing_works"] == 1
     assert overall["doi_expected_missing_share"] == 0.5
+
+
+def test_source_summary_uses_doi_expected_subset_for_missing_share_denominator():
+    work_df = pd.DataFrame(
+        [
+            {
+                "canonical_work_id": "cw_1",
+                "source": "openalex",
+                "source_record_id": "oa_1",
+                "record_type": "journal_article",
+                "match_basis": "doi",
+                "outcome_state": "integration_ready",
+                "confidence_band": "high",
+                "flags": [],
+                "conflict_fields": [],
+                "introduced_major_conflict": False,
+                "introduced_weak_author_identity": False,
+                "introduced_weak_institution_linkage": False,
+                "introduced_doi_expected_missing": False,
+                "has_external_corroboration": True,
+                "has_major_conflict": False,
+            },
+            {
+                "canonical_work_id": "cw_2",
+                "source": "openalex",
+                "source_record_id": "oa_2",
+                "record_type": "journal_article",
+                "match_basis": "fallback",
+                "outcome_state": "not_integration_ready",
+                "confidence_band": "low",
+                "flags": ["doi_expected_missing"],
+                "conflict_fields": [],
+                "introduced_major_conflict": False,
+                "introduced_weak_author_identity": False,
+                "introduced_weak_institution_linkage": False,
+                "introduced_doi_expected_missing": True,
+                "has_external_corroboration": False,
+                "has_major_conflict": False,
+            },
+            {
+                "canonical_work_id": "cw_3",
+                "source": "openalex",
+                "source_record_id": "oa_3",
+                "record_type": "thesis",
+                "match_basis": "fallback",
+                "outcome_state": "not_integration_ready",
+                "confidence_band": "low",
+                "flags": [],
+                "conflict_fields": [],
+                "introduced_major_conflict": False,
+                "introduced_weak_author_identity": False,
+                "introduced_weak_institution_linkage": False,
+                "introduced_doi_expected_missing": False,
+                "has_external_corroboration": False,
+                "has_major_conflict": False,
+            },
+        ]
+    )
+
+    summary = build_source_reliability_summary(work_df)
+    overall = summary[(summary["source"] == "openalex") & (summary["record_type"] == "__all__")].iloc[0]
+    articles = summary[(summary["source"] == "openalex") & (summary["record_type"] == "journal_article")].iloc[0]
+
+    assert overall["canonical_works"] == 3
+    assert overall["doi_expected_missing_works"] == 1
+    assert overall["doi_expected_missing_share"] == 0.5
+    assert articles["canonical_works"] == 2
+    assert articles["doi_expected_missing_share"] == 0.5
