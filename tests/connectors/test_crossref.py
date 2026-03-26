@@ -83,6 +83,24 @@ def test_validate_doi_returns_title_year_and_type():
     assert result["published_year"] == 2023
     assert result["document_type"] == "journal-article"
 
+@pytest.mark.parametrize(
+    ("date_field", "expected_year"),
+    [
+        ("issued", 2024),
+        ("published-online", 2025),
+    ],
+)
+def test_validate_doi_uses_fallback_date_fields(date_field, expected_year):
+    conn = CrossrefConnector()
+    work = {
+        **_SAMPLE_WORK,
+        "title": ["Observed work title"],
+        date_field: {"date-parts": [[expected_year, 1, 1]]},
+    }
+    with patch.object(conn, "_get_work", return_value=work):
+        result = conn.validate_doi("10.1234/test")
+    assert result["published_year"] == expected_year
+
 def test_validate_doi_missing_returns_none():
     conn = CrossrefConnector()
     with patch.object(conn, "_get_work", return_value=None):

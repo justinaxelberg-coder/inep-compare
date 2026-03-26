@@ -74,15 +74,26 @@ class CrossrefConnector:
         lower = funder_name.lower()
         return any(br in lower for br in _BR_FUNDERS)
 
+    def _extract_year(self, work: dict) -> int | None:
+        for field in ("published", "published-print", "issued", "published-online"):
+            published = work.get(field) or {}
+            date_parts = published.get("date-parts") or []
+            if not date_parts or not date_parts[0]:
+                continue
+            year = date_parts[0][0]
+            if year not in (None, ""):
+                try:
+                    return int(year)
+                except (TypeError, ValueError):
+                    continue
+        return None
+
     def validate_doi(self, doi: str) -> dict | None:
         """Return metadata quality dict for one DOI, or None if not found."""
         work = self._get_work(doi)
         if work is None:
             return None
         titles = work.get("title") or []
-        published = work.get("published") or work.get("published-print") or {}
-        date_parts = published.get("date-parts") or [[None]]
-        year = date_parts[0][0] if date_parts and date_parts[0] else None
         funders = work.get("funder") or []
         return {
             "doi": doi,
@@ -94,7 +105,7 @@ class CrossrefConnector:
             "ror_affiliation_present": self.has_ror_affiliation(work),
             "document_type": work.get("type"),
             "title": titles[0] if titles else None,
-            "published_year": year,
+            "published_year": self._extract_year(work),
         }
 
     def validate_batch(self, dois: list[str]) -> list[dict]:

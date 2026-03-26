@@ -45,3 +45,10 @@ def test_external_corroboration_ignores_minor_title_variance():
     result = external_corroboration_for_work(work, crossref)
     assert result["has_major_conflict"] is False
     assert "title" not in result["conflict_fields"]
+
+
+def test_external_corroboration_normalizes_doi_variants():
+    work = {"doi": "https://doi.org/10.1234/X", "title": "Observed work title", "year": 2023, "record_type": "journal_article"}
+    crossref = {"doi": "doi:10.1234/x", "title": "Observed work title", "year": 2023, "record_type": "journal_article"}
+    result = external_corroboration_for_work(work, crossref)
+    assert result["has_external_corroboration"] is True

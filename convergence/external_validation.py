@@ -16,6 +16,24 @@ def _normalise_year(value: object) -> int | None:
         return None
 
 
+def _normalise_doi(value: object) -> str | None:
+    if value in (None, ""):
+        return None
+    doi = str(value).strip().lower()
+    prefixes = (
+        "https://doi.org/",
+        "http://doi.org/",
+        "https://dx.doi.org/",
+        "http://dx.doi.org/",
+        "doi:",
+    )
+    for prefix in prefixes:
+        if doi.startswith(prefix):
+            doi = doi[len(prefix) :]
+            break
+    return doi or None
+
+
 def _normalise_title(value: object) -> str | None:
     if value in (None, ""):
         return None
@@ -72,7 +90,9 @@ def external_corroboration_for_work(work: dict, crossref_payload: dict | None) -
     if _titles_have_major_conflict(work.get("title"), ref.get("title")):
         conflict_fields.append("title")
 
-    has_external_corroboration = bool(work.get("doi") and ref.get("doi") and work["doi"] == ref["doi"])
+    work_doi = _normalise_doi(work.get("doi"))
+    ref_doi = _normalise_doi(ref.get("doi"))
+    has_external_corroboration = bool(work_doi and ref_doi and work_doi == ref_doi)
 
     return {
         "has_external_corroboration": has_external_corroboration,
